@@ -10,23 +10,38 @@ export default async function messageRoutes(fastify) {
    * 获取当前用户的消息列表（按时间倒序，支持分页）
    */
   fastify.get('/user/messages', { preHandler: authGuard }, async (request) => {
-    const { page = '1', pageSize = '20' } = request.query
+    const { page = '1', pageSize = '20', type, not } = request.query
     const limit = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 100)
     const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit
 
+    // 构建动态 WHERE 条件
+    const conditions = ['user_id = ?']
+    const params = [request.user.userId]
+
+    if (type) {
+      conditions.push('type = ?')
+      params.push(type)
+    }
+    if (not) {
+      conditions.push('type != ?')
+      params.push(not)
+    }
+
+    const whereClause = conditions.join(' AND ')
+
     const { total } = queryOne(
-      'SELECT COUNT(*) as total FROM messages WHERE user_id = ?',
-      [request.user.userId],
+      `SELECT COUNT(*) as total FROM messages WHERE ${whereClause}`,
+      params,
     ) || { total: 0 }
 
     const unreadCount = queryOne(
-      'SELECT COUNT(*) as cnt FROM messages WHERE user_id = ? AND unread = 1',
-      [request.user.userId],
+      `SELECT COUNT(*) as cnt FROM messages WHERE ${whereClause} AND unread = 1`,
+      params,
     )
 
     const rows = queryAll(
-      'SELECT * FROM messages WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
-      [request.user.userId, limit, offset],
+      `SELECT * FROM messages WHERE ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
     )
     return {
       list: rows.map(formatMessage),
@@ -35,6 +50,18 @@ export default async function messageRoutes(fastify) {
       pageSize: limit,
       unreadCount: unreadCount?.cnt || 0,
     }
+  })
+
+  /**
+   * GET /user/notifications/count
+   * 获取非私聊消息的未读数（通知入口小红点用）
+   */
+  fastify.get('/user/notifications/count', { preHandler: authGuard }, async (request) => {
+    const row = queryOne(
+      "SELECT COUNT(*) as cnt FROM messages WHERE user_id = ? AND type != 'chat' AND unread = 1",
+      [request.user.userId],
+    )
+    return { count: row?.cnt || 0 }
   })
 
   /**

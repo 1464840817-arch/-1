@@ -80,3 +80,25 @@ export function updateTenantConfig(data) {
     body: data,
   })
 }
+
+// ==================== 个人页面可见性配置（管理员） ====================
+
+/**
+ * 获取个人页面模块可见性配置
+ * @returns {Promise<{myPosts:boolean, totalLikes:boolean, totalViews:boolean, collections:boolean, history:boolean, delisted:boolean}>}
+ */
+export function getProfileVisibility() {
+  return request('/tenant/profile-visibility')
+}
+
+/**
+ * 更新个人页面模块可见性配置
+ * @param {object} data - 部分可见性字段
+ * @returns {Promise<{ok:boolean, profileVisibility:object}>}
+ */
+export function updateProfileVisibility(data) {
+  return request('/tenant/profile-visibility', {
+    method: 'PUT',
+    body: data,
+  })
+}

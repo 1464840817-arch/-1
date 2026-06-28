@@ -73,6 +73,8 @@ export async function setupTestDb() {
   try { db.run('ALTER TABLE users ADD COLUMN department TEXT NOT NULL DEFAULT \'\'') } catch { /* 已存在 */ }
   try { db.run('ALTER TABLE users ADD COLUMN last_active TEXT NOT NULL DEFAULT \'\'') } catch { /* 已存在 */ }
   try { db.run("CREATE TABLE IF NOT EXISTS user_likes (user_id INTEGER NOT NULL, target_type TEXT NOT NULL, target_id INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (user_id, target_type, target_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)") } catch { /* 已存在 */ }
+  try { db.run("ALTER TABLE articles ADD COLUMN status TEXT NOT NULL DEFAULT 'published'") } catch { /* 已存在 */ }
+  try { db.run('CREATE TABLE IF NOT EXISTS operation_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, operator TEXT NOT NULL, operator_role TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL DEFAULT \'\', created_at TEXT NOT NULL DEFAULT (datetime(\'now\')))') } catch { /* 已存在 */ }
   __setDbForTest(db)
 
   // 写入种子用户
@@ -111,7 +113,7 @@ export async function createTestServer(routeModules = 'all') {
 
   // 注册路由
   const allModules = routeModules === 'all'
-    ? ['auth', 'article', 'search', 'collection', 'history', 'message', 'friend', 'profile', 'tenant', 'admin']
+    ? ['auth', 'article', 'search', 'collection', 'history', 'message', 'friend', 'profile', 'tenant', 'admin', 'operationLogs']
     : routeModules
 
   for (const name of allModules) {

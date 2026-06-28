@@ -16,7 +16,7 @@ export default async function articleRoutes(fastify) {
     const limit = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 100)
     const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit
 
-    let sql = 'SELECT * FROM articles WHERE 1=1'
+    let sql = "SELECT * FROM articles WHERE status = 'published'"
     const params = []
 
     if (q && q.trim()) {
@@ -73,7 +73,7 @@ export default async function articleRoutes(fastify) {
   fastify.get('/articles/:id', { preHandler: optionalAuth }, async (request, reply) => {
     const id = parseInt(request.params.id, 10)
     const row = queryOne(
-      `SELECT a.*, u.department, u.desc AS author_desc
+      `SELECT a.*, u.id AS author_id, u.department, u.desc AS author_desc
        FROM articles a
        LEFT JOIN users u ON a.author = u.name
        WHERE a.id = ?`,
@@ -169,6 +169,41 @@ export default async function articleRoutes(fastify) {
   })
 
   /**
+   * POST /articles/:id/share
+   * 分享文章给好友（需登录，向好友发送消息通知）
+   */
+  fastify.post('/articles/:id/share', { preHandler: authGuard }, async (request, reply) => {
+    const id = parseInt(request.params.id, 10)
+    const article = queryOne('SELECT id, title FROM articles WHERE id = ?', [id])
+    if (!article) {
+      return reply.status(404).send({ message: '文章不存在' })
+    }
+
+    const { friendId } = request.body || {}
+    if (!friendId || !Number.isInteger(friendId) || friendId <= 0) {
+      return reply.status(400).send({ message: '请提供好友 ID' })
+    }
+
+    // 不能分享给自己
+    if (friendId === request.user.userId) {
+      return reply.status(400).send({ message: '不能分享给自己' })
+    }
+
+    const friend = queryOne('SELECT id FROM users WHERE id = ?', [friendId])
+    if (!friend) {
+      return reply.status(404).send({ message: '好友不存在' })
+    }
+
+    execute(
+      `INSERT INTO messages (user_id, type, sender, action, content, target_id)
+       VALUES (?, 'share', ?, '分享了一篇文章给你', ?, ?)`,
+      [friendId, request.user.name, article.title, id],
+    )
+
+    return { ok: true }
+  })
+
+  /**
    * POST /articles
    * 创建文章（需登录）
    */
@@ -196,7 +231,7 @@ export default async function articleRoutes(fastify) {
 
   /**
    * PUT /articles/:id
-   * 更新文章（需登录，仅作者本人）
+   * 更新文章（需登录，作者本人或管理员及以上可编辑）
    */
   fastify.put('/articles/:id', { preHandler: authGuard }, async (request, reply) => {
     const id = parseInt(request.params.id, 10)
@@ -204,9 +239,11 @@ export default async function articleRoutes(fastify) {
     if (!existing) {
       return reply.status(404).send({ message: '文章不存在' })
     }
-    // 仅作者本人可编辑
-    if (existing.author !== request.user.name && existing.author !== request.user.account) {
-      return reply.status(403).send({ message: '只能编辑自己发布的文章' })
+    // 作者本人 或 管理员及以上可编辑
+    const isOwner = existing.author === request.user.name || existing.author === request.user.account
+    const isAdminUser = request.user.role === '管理员' || request.user.role === '系统部署人员'
+    if (!isOwner && !isAdminUser) {
+      return reply.status(403).send({ message: '无权编辑此文章' })
     }
 
     const { type, title, desc, steps, tags } = request.body || {}
@@ -223,13 +260,31 @@ export default async function articleRoutes(fastify) {
       ],
     )
 
+    // 管理员修改他人文章时通知作者
+    if (!isOwner) {
+      const authorUser = queryOne('SELECT id FROM users WHERE name = ?', [existing.author])
+      if (authorUser) {
+        execute(
+          `INSERT INTO messages (user_id, type, sender, action, content, target_id)
+           VALUES (?, 'system', ?, '修改了你的文章', ?, ?)`,
+          [authorUser.id, request.user.name, existing.title, id],
+        )
+      }
+      // 操作日志
+      execute(
+        'INSERT INTO operation_logs (operator, operator_role, action, detail) VALUES (?, ?, ?, ?)',
+        [request.user.name, request.user.role, '编辑文章', `编辑了用户「${existing.author}」的文章「${existing.title}」`],
+      )
+    }
+
     const row = queryOne('SELECT * FROM articles WHERE id = ?', [id])
     return formatArticle(row)
   })
 
   /**
    * DELETE /articles/:id
-   * 删除文章（需登录，仅作者本人或管理员）
+   * 下架文章（软删除，需登录，仅作者本人或管理员）
+   * 将 status 设为 'delisted' 而非物理删除
    */
   fastify.delete('/articles/:id', { preHandler: authGuard }, async (request, reply) => {
     const id = parseInt(request.params.id, 10)
@@ -237,33 +292,84 @@ export default async function articleRoutes(fastify) {
     if (!existing) {
       return reply.status(404).send({ message: '文章不存在' })
     }
-    // 作者本人 或 管理员及以上可删除
+    // 作者本人 或 管理员及以上可下架
     const isOwner = existing.author === request.user.name || existing.author === request.user.account
     const isAdminUser = request.user.role === '管理员' || request.user.role === '系统部署人员'
     if (!isOwner && !isAdminUser) {
-      return reply.status(403).send({ message: '无权删除此文章' })
+      return reply.status(403).send({ message: '无权操作此文章' })
     }
 
-    execute('DELETE FROM articles WHERE id = ?', [id])
+    execute("UPDATE articles SET status = 'delisted', updated_at = datetime('now','localtime') WHERE id = ?", [id])
+
+    // 管理员下架他人文章时通知作者
+    if (!isOwner) {
+      const authorUser = queryOne('SELECT id FROM users WHERE name = ?', [existing.author])
+      if (authorUser) {
+        execute(
+          `INSERT INTO messages (user_id, type, sender, action, content, target_id)
+           VALUES (?, 'system', ?, '下架了你的文章', ?, ?)`,
+          [authorUser.id, request.user.name, existing.title, id],
+        )
+      }
+      // 操作日志
+      execute(
+        'INSERT INTO operation_logs (operator, operator_role, action, detail) VALUES (?, ?, ?, ?)',
+        [request.user.name, request.user.role, '下架文章', `下架了用户「${existing.author}」的文章「${existing.title}」`],
+      )
+    }
+
     return { ok: true }
   })
 
   /**
-   * GET /user/posts?page=&pageSize=
-   * 获取当前用户发布的文章列表（支持分页）
+   * PUT /articles/:id/restore
+   * 恢复已下架文章（需登录，仅作者本人或管理员）
+   */
+  fastify.put('/articles/:id/restore', { preHandler: authGuard }, async (request, reply) => {
+    const id = parseInt(request.params.id, 10)
+    const existing = queryOne('SELECT * FROM articles WHERE id = ?', [id])
+    if (!existing) {
+      return reply.status(404).send({ message: '文章不存在' })
+    }
+    if (existing.status !== 'delisted') {
+      return reply.status(400).send({ message: '该文章未处于下架状态' })
+    }
+    const isOwner = existing.author === request.user.name || existing.author === request.user.account
+    const isAdminUser = request.user.role === '管理员' || request.user.role === '系统部署人员'
+    if (!isOwner && !isAdminUser) {
+      return reply.status(403).send({ message: '无权操作此文章' })
+    }
+
+    execute("UPDATE articles SET status = 'published', updated_at = datetime('now','localtime') WHERE id = ?", [id])
+    return { ok: true }
+  })
+
+  /**
+   * GET /user/posts?page=&pageSize=&status=
+   * 获取当前用户发布的文章列表（支持分页和状态下架筛选）
+   * status 可选值: 'published'（默认）, 'delisted', 'all'
    */
   fastify.get('/user/posts', { preHandler: authGuard }, async (request) => {
-    const { page = '1', pageSize = '20' } = request.query
+    const { page = '1', pageSize = '20', status } = request.query
     const limit = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 100)
     const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit
 
+    let statusFilter = ''
+    if (status === 'delisted') {
+      statusFilter = " AND status = 'delisted'"
+    } else if (status === 'all') {
+      statusFilter = ''
+    } else {
+      statusFilter = " AND status = 'published'"
+    }
+
     const { total } = queryOne(
-      'SELECT COUNT(*) as total FROM articles WHERE author = ?',
+      `SELECT COUNT(*) as total FROM articles WHERE author = ?${statusFilter}`,
       [request.user.name],
     ) || { total: 0 }
 
     const rows = queryAll(
-      'SELECT * FROM articles WHERE author = ? ORDER BY date DESC LIMIT ? OFFSET ?',
+      `SELECT * FROM articles WHERE author = ?${statusFilter} ORDER BY date DESC LIMIT ? OFFSET ?`,
       [request.user.name, limit, offset],
     )
 
@@ -465,6 +571,7 @@ function formatArticle(row, likedIds) {
     title: row.title,
     desc: row.desc,
     author: row.author,
+    authorId: row.author_id || null,
     department: row.department || '',
     authorDesc: row.author_desc || '',
     date: row.date,

@@ -3,7 +3,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { userStore, clearLoginState, currentCanAccessAdmin } from '../store/user.js'
-import { getMyPosts } from '../api/article.js'
+import { getDelistedPosts } from '../api/article.js'
+import { getProfileVisibility } from '../api/tenant.js'
 import { request } from '../api/client.js'
 
 const router = useRouter()
@@ -12,38 +13,62 @@ const router = useRouter()
 const loading = ref(true)
 const refreshing = ref(false)
 const postCount = ref(0)
-const recentPosts = ref([])
+const delistedCount = ref(0)
 const totalLikes = ref(0)
 const totalViews = ref(0)
+
+// 个人页面模块可见性
+const visibility = ref({
+  myPosts: true,
+  totalLikes: true,
+  totalViews: true,
+  collections: true,
+  history: true,
+  delisted: true,
+})
 
 const loadAll = async (silent = false) => {
   if (!silent) loading.value = true
   try {
-    const [posts, stats] = await Promise.all([
-      getMyPosts(),
+    const [stats, delistedData, visData] = await Promise.all([
       request('/user/stats').catch(() => ({ total_likes: 0, total_views: 0, total_posts: 0 })),
+      getDelistedPosts().catch(() => ({ list: [], total: 0 })),
+      getProfileVisibility().catch(() => null),
     ])
-    const list = Array.isArray(posts) ? posts : []
-    postCount.value = list.length
-    recentPosts.value = list.slice(0, 3)
+    postCount.value = stats.total_posts || 0
     totalLikes.value = stats.total_likes || 0
     totalViews.value = stats.total_views || 0
+    // 已下架文章数量
+    if (delistedData && typeof delistedData.total === 'number') {
+      delistedCount.value = delistedData.total
+    } else if (Array.isArray(delistedData)) {
+      delistedCount.value = delistedData.length
+    } else if (delistedData && Array.isArray(delistedData.list)) {
+      delistedCount.value = delistedData.list.length
+    }
+    // 可见性配置
+    if (visData) {
+      visibility.value = visData
+    }
   } catch {
     postCount.value = 0
-    recentPosts.value = []
   } finally {
     loading.value = false
     refreshing.value = false
   }
 }
 
-const stats = computed(() => [
-  { label: '我的发布', count: postCount.value, icon: '📝', color: 'green' },
-  { label: '获得点赞', count: totalLikes.value, icon: '❤️', color: 'red' },
-  { label: '总浏览量', count: totalViews.value, icon: '👁️', color: 'blue' },
-  { label: '收藏夹', count: userStore.collectIds.length, icon: '📁', color: 'purple' },
-  { label: '浏览历史', count: userStore.historyIds.length, icon: '🕒', color: 'amber' },
+const allStats = computed(() => [
+  { key: 'myPosts', label: '我的发布', count: postCount.value, icon: '📝', color: 'green' },
+  { key: 'totalLikes', label: '获得点赞', count: totalLikes.value, icon: '❤️', color: 'red' },
+  { key: 'totalViews', label: '总浏览量', count: totalViews.value, icon: '👁️', color: 'blue' },
+  { key: 'collections', label: '收藏夹', count: userStore.collectIds.length, icon: '📁', color: 'purple' },
+  { key: 'history', label: '浏览历史', count: userStore.historyIds.length, icon: '🕒', color: 'amber' },
+  { key: 'delisted', label: '已下架文章', count: delistedCount.value, icon: '📦', color: 'slate' },
 ])
+
+// 根据可见性配置过滤看板卡片
+const stats = computed(() => allStats.value.filter(s => visibility.value[s.key] !== false))
 
 // ==================== 下拉刷新 ====================
 const pullDistance = ref(0)
@@ -84,6 +109,7 @@ const goToStat = (label) => {
     '收藏夹': '/collection',
     '浏览历史': '/history',
     '我的发布': '/profile/posts',
+    '已下架文章': '/profile/delisted',
   }
   if (routeMap[label]) router.push(routeMap[label])
 }
@@ -178,56 +204,7 @@ const handleLogout = () => {
       </div>
     </div>
 
-    <!-- ==================== 3. 最近发布 ==================== -->
-    <div v-if="!loading && recentPosts.length > 0" class="recent-section">
-      <div class="recent-header">
-        <h3 class="recent-title">📝 最近发布</h3>
-        <span class="recent-more" role="button" tabindex="0" @click="router.push('/profile/posts')" @keydown.enter.prevent="router.push('/profile/posts')" @keydown.space.prevent="router.push('/profile/posts')">查看全部 →</span>
-      </div>
-      <div class="recent-list">
-        <article
-          v-for="post in recentPosts"
-          :key="post.id"
-          class="recent-card"
-          role="button"
-          tabindex="0"
-          @click="router.push(`/article/${post.id}`)"
-          @keydown.enter.prevent="router.push(`/article/${post.id}`)"
-          @keydown.space.prevent="router.push(`/article/${post.id}`)"
-        >
-          <div class="recent-card-top">
-            <span class="recent-type">{{ post.type }}</span>
-            <span class="recent-date">{{ post.date }}</span>
-          </div>
-          <h4 class="recent-card-title">{{ post.title }}</h4>
-          <div class="recent-card-meta">
-            <span>{{ post.author }}</span>
-            <span class="recent-stats">
-              <span>❤️ {{ post.likes }}</span>
-              <span>💬 {{ post.comments }}</span>
-              <span>👁️ {{ post.views }}</span>
-            </span>
-          </div>
-        </article>
-      </div>
-    </div>
-
-    <!-- 骨架屏加载 -->
-    <div v-if="loading" class="recent-section">
-      <div v-for="n in 2" :key="n" class="skeleton-card">
-        <div class="skel-row">
-          <span class="skel-tag"></span>
-          <span class="skel-date"></span>
-        </div>
-        <div class="skel-line skel-title"></div>
-        <div class="skel-row">
-          <span class="skel-line skel-name"></span>
-          <span class="skel-line skel-nums"></span>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== 4. 功能菜单 ==================== -->
+    <!-- ==================== 3. 功能菜单 ==================== -->
     <div class="menu-card">
       <!-- 好友管理 -->
       <div class="menu-item" role="button" tabindex="0" @click="router.push('/friend')" @keydown.enter.prevent="router.push('/friend')" @keydown.space.prevent="router.push('/friend')">
@@ -470,6 +447,7 @@ const handleLogout = () => {
 .stat-card--green::before   { background: var(--color-success); }
 .stat-card--red::before     { background: var(--color-error); }
 .stat-card--purple::before  { background: #8b5cf6; }
+.stat-card--slate::before   { background: #64748b; }
 
 .stat-card:active {
   transform: scale(0.95);
@@ -497,116 +475,6 @@ const handleLogout = () => {
   font-size: 11px;
   color: var(--color-text-tertiary);
   font-weight: 400;
-}
-
-/* ==================== 3. 最近发布 ==================== */
-.recent-section {
-  margin-bottom: 16px;
-}
-.recent-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.recent-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin: 0;
-}
-.recent-more {
-  font-size: 13px;
-  color: var(--color-primary);
-  cursor: pointer;
-  font-weight: 500;
-}
-.recent-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.recent-card {
-  background: var(--color-bg-card);
-  border-radius: 12px;
-  padding: 12px 14px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-  border: 1px solid var(--color-border);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.recent-card:active { background: var(--color-bg-page); }
-.recent-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-.recent-type {
-  font-size: 11px;
-  color: var(--color-primary);
-  background: var(--color-primary-light);
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-weight: 500;
-}
-.recent-date { font-size: 11px; color: var(--color-text-tertiary); }
-.recent-card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin: 0 0 6px 0;
-  line-height: 1.4;
-}
-.recent-card-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: var(--color-text-tertiary);
-}
-.recent-stats { display: flex; gap: 8px; }
-
-/* --- 骨架屏 --- */
-.skeleton-card {
-  background: var(--color-bg-card);
-  border-radius: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-.skel-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.skel-tag {
-  width: 50px; height: 16px; border-radius: 4px;
-  background: linear-gradient(90deg, var(--color-divider) 25%, var(--color-bg-page) 50%, var(--color-divider) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-}
-.skel-date {
-  width: 70px; height: 12px; border-radius: 4px;
-  background: linear-gradient(90deg, var(--color-divider) 25%, var(--color-bg-page) 50%, var(--color-divider) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-}
-.skel-line {
-  height: 12px; border-radius: 4px;
-  background: linear-gradient(90deg, var(--color-divider) 25%, var(--color-bg-page) 50%, var(--color-divider) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-}
-.skel-title { width: 75%; height: 14px; }
-.skel-name { width: 36px; }
-.skel-nums { width: 64px; }
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
 }
 
 /* --- 下拉刷新 --- */
@@ -641,7 +509,7 @@ const handleLogout = () => {
 .refresh-text { user-select: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ==================== 4. 功能菜单 ==================== */
+/* ==================== 3. 功能菜单 ==================== */
 .menu-card {
   background: var(--color-bg-card);
   border-radius: 16px;
@@ -711,7 +579,7 @@ const handleLogout = () => {
   transform: translateX(3px);
 }
 
-/* ==================== 5. 退出登录 ==================== */
+/* ==================== 4. 退出登录 ==================== */
 .logout-btn {
   width: 100%;
   display: inline-flex;

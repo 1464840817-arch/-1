@@ -12,12 +12,14 @@ import { execute } from '../db.js'
 let fastify
 let adminToken
 let engToken
+let liToken
 
 beforeEach(async () => {
   await setupTestDb()
   fastify = await createTestServer('all')
   adminToken = makeToken(SUPER_ADMIN)
   engToken = makeToken(ENGINEER)
+  liToken = makeToken(ENGINEER_LI)
 })
 
 afterEach(async () => {
@@ -225,16 +227,25 @@ describe('好友管理 (friend)', () => {
     expect(json(res)).toEqual([])
   })
 
-  it('POST 添加 → GET 有一人 → DELETE 移除', async () => {
-    // 添加李工
+  it('POST 发送请求 → 对方接受 → GET 有一人 → DELETE 移除', async () => {
+    // 发送好友请求
     const addRes = await fastify.inject({
       method: 'POST', url: '/user/friends',
       payload: { userId: ENGINEER_LI.id },
       headers: { authorization: engToken },
     })
     expect(addRes.statusCode).toBe(200)
+    expect(json(addRes).status).toBe('requested')
 
-    // 确认
+    // 李工接受请求
+    const acceptRes = await fastify.inject({
+      method: 'POST', url: '/user/friends/handle',
+      payload: { userId: ENGINEER.id, action: 'accept' },
+      headers: { authorization: liToken },
+    })
+    expect(acceptRes.statusCode).toBe(200)
+
+    // 确认好友列表有一人
     const getRes = await fastify.inject({
       method: 'GET', url: '/user/friends',
       headers: { authorization: engToken },

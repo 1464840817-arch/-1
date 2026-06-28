@@ -93,6 +93,12 @@ export default async function adminRoutes(fastify) {
       [account.trim(), hashed, name.trim(), targetRole, (department || '').trim()],
     )
 
+    // 操作日志
+    execute(
+      'INSERT INTO operation_logs (operator, operator_role, action, detail) VALUES (?, ?, ?, ?)',
+      [request.user.name, request.user.role, '创建用户', `创建了用户「${name.trim()}」（${targetRole}）`],
+    )
+
     const row = queryOne('SELECT id, account, name, role, department, disabled, created_at FROM users ORDER BY id DESC LIMIT 1')
     return {
       id: row.id,
@@ -133,6 +139,17 @@ export default async function adminRoutes(fastify) {
       execute('UPDATE users SET department = ? WHERE id = ?', [department.trim(), id])
     }
 
+    // 操作日志
+    const changedFields = []
+    if (name !== undefined) changedFields.push('姓名')
+    if (role !== undefined) changedFields.push('角色')
+    if (department !== undefined) changedFields.push('部门')
+    const fieldSummary = changedFields.length > 0 ? `（${changedFields.join('、')}）` : ''
+    execute(
+      'INSERT INTO operation_logs (operator, operator_role, action, detail) VALUES (?, ?, ?, ?)',
+      [request.user.name, request.user.role, '修改用户信息', `修改了用户「${user.name}」的信息${fieldSummary}`],
+    )
+
     return { ok: true }
   })
 
@@ -151,6 +168,13 @@ export default async function adminRoutes(fastify) {
     }
 
     execute('DELETE FROM users WHERE id = ?', [id])
+
+    // 操作日志
+    execute(
+      'INSERT INTO operation_logs (operator, operator_role, action, detail) VALUES (?, ?, ?, ?)',
+      [request.user.name, request.user.role, '删除用户', `删除了用户「${user.name}」`],
+    )
+
     return { ok: true }
   })
 
@@ -171,6 +195,13 @@ export default async function adminRoutes(fastify) {
 
     const { disabled } = request.body || {}
     execute('UPDATE users SET disabled = ? WHERE id = ?', [disabled ? 1 : 0, id])
+
+    // 操作日志
+    execute(
+      'INSERT INTO operation_logs (operator, operator_role, action, detail) VALUES (?, ?, ?, ?)',
+      [request.user.name, request.user.role, '修改用户状态', `${disabled ? '禁用' : '启用'}了用户「${user.name}」`],
+    )
+
     return { ok: true }
   })
 
@@ -193,6 +224,13 @@ export default async function adminRoutes(fastify) {
 
     const hashed = await bcrypt.hash(password, 10)
     execute('UPDATE users SET password = ? WHERE id = ?', [hashed, id])
+
+    // 操作日志
+    execute(
+      'INSERT INTO operation_logs (operator, operator_role, action, detail) VALUES (?, ?, ?, ?)',
+      [request.user.name, request.user.role, '重置密码', `重置了用户「${user.name}」的密码`],
+    )
+
     return { ok: true }
   })
 }

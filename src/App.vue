@@ -9,7 +9,7 @@ import { initUserData } from './store/user.js'
 const route = useRoute()
 
 // 底部导航隐藏的路由：文章详情页、编辑资料页
-const hideNavRoutes = ['ArticleDetail', 'ProfileEdit', 'Publish', 'Collection', 'History', 'Login', 'FriendManage', 'PostsView', 'AdminDashboard', 'AccountManage', 'ConfigView']
+const hideNavRoutes = ['ArticleDetail', 'ProfileEdit', 'Publish', 'Collection', 'History', 'Login', 'FriendManage', 'ChatView', 'UserDetail', 'PostsView', 'AdminDashboard', 'AccountManage', 'ConfigView', 'OperationLogs']
 const showBottomNav = computed(() => !hideNavRoutes.includes(route.name))
 
 // Toast 全局方法 — 通过 provide 注入给所有子组件

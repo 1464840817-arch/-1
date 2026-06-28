@@ -5,6 +5,7 @@ import { userStore, restoreSession } from '../store/user.js'
 import HomeView from '../views/HomeView.vue'
 import SearchView from '../views/SearchView.vue'
 import MessageView from '../views/MessageView.vue'
+import NotificationView from '../views/NotificationView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import ArticleDetail from '../views/ArticleDetail.vue'
 import ProfileEdit from '../views/ProfileEdit.vue'
@@ -13,10 +14,14 @@ import CollectionView from '../views/CollectionView.vue'
 import HistoryView from '../views/HistoryView.vue'
 import LoginView from '../views/LoginView.vue'
 import FriendManage from '../views/FriendManage.vue'
+import ChatView from '../views/ChatView.vue'
 import PostsView from '../views/PostsView.vue'
+import DelistedPosts from '../views/DelistedPosts.vue'
+import UserDetail from '../views/UserDetail.vue'
 import AdminDashboard from '../views/AdminDashboard.vue'
 import AccountManage from '../views/AccountManage.vue'
 import ConfigView from '../views/ConfigView.vue'
+import OperationLogs from '../views/OperationLogs.vue'
 import NotFound from '../views/NotFound.vue'
 import { isAdmin as checkIsAdmin } from '../store/auth.js'
 
@@ -27,6 +32,7 @@ const routes = [
   { path: '/search', name: 'Search', component: SearchView },
   { path: '/home', name: 'Home', component: HomeView },
   { path: '/message', name: 'Message', component: MessageView },
+  { path: '/notifications', name: 'Notifications', component: NotificationView },
   { path: '/profile', name: 'Profile', component: ProfileView },
   { path: '/profile/edit', name: 'ProfileEdit', component: ProfileEdit },
   { path: '/publish', name: 'Publish', component: PublishView },
@@ -34,6 +40,7 @@ const routes = [
   { path: '/history', name: 'History', component: HistoryView },
   { path: '/friend', name: 'FriendManage', component: FriendManage },
   { path: '/profile/posts', name: 'PostsView', component: PostsView },
+  { path: '/profile/delisted', name: 'DelistedPosts', component: DelistedPosts },
 
   // 管理中心（管理员及以上）
   {
@@ -72,8 +79,22 @@ const routes = [
       next()
     },
   },
+  {
+    path: '/admin/operation-logs',
+    name: 'OperationLogs',
+    component: OperationLogs,
+    beforeEnter: (_to, _from, next) => {
+      if (!checkIsAdmin(userStore.role)) {
+        next('/profile')
+        return
+      }
+      next()
+    },
+  },
 
   { path: '/article/:id', name: 'ArticleDetail', component: ArticleDetail },
+  { path: '/chat/:friendId', name: 'ChatView', component: ChatView },
+  { path: '/user/:id', name: 'UserDetail', component: UserDetail },
 
   // 404 兜底 — 必须放在最后
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFound },

@@ -82,6 +82,7 @@ const handleLogin = async () => {
         name: result.name || account.value.trim(),
         token: result.token,
         role: result.role || '',
+        account: result.account || account.value.trim(),
       })
       const redirect = route.query.redirect || '/search'
       router.push(redirect)
@@ -103,6 +104,7 @@ const handleLogin = async () => {
         name: isSeedAdmin ? SEED_SUPER_ADMIN.name : account.value.trim(),
         token: 'demo-token',
         role: isSeedAdmin ? SEED_SUPER_ADMIN.role : '一线工程师',
+        account: isSeedAdmin ? SEED_SUPER_ADMIN.account : account.value.trim(),
       })
       const redirect = route.query.redirect || '/search'
       router.push(redirect)

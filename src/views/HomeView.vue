@@ -2,19 +2,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getCategoryTags } from '../api/tenant.js'
+import { getCategoryTags, addCategoryTag, deleteCategoryTag } from '../api/tenant.js'
 import { searchArticles } from '../api/search.js'
 import { likeArticle } from '../api/article.js'
-import { isCollected, toggleCollect as toggleCollectStore } from '../store/user.js'
+import { isCollected, toggleCollect as toggleCollectStore, currentIsAdmin } from '../store/user.js'
 
 const router = useRouter()
-
-// ==================== 图标映射 ====================
-const tagIconMap = {
-  '电机类': '⚡', 'PLC类': '💻', '变频器': '🌀', '伺服/驱动': '🔧', '传感器': '📡', '通讯': '📶',
-  '设计缺陷': '📐', '安装调试': '🔩', '元器件故障': '⚠️', '客户现场': '🏭', '软件/参数': '💾',
-}
-const getTagIcon = (name) => tagIconMap[name] || '🏷️'
 
 // ==================== 搜索 ====================
 const searchInput = ref('')
@@ -23,8 +16,9 @@ const handleSearch = () => {
   router.push(`/search?q=${encodeURIComponent(searchInput.value.trim())}`)
 }
 
-// ==================== 分类标签（动态拉取） ====================
-const filterItems = ref([{ name: '全部', active: true, icon: '📋' }])
+// ==================== 筛选标签（动态拉取 + 管理员可编辑） ====================
+const filterItems = ref(['全部'])
+const tagObjects = ref([])   // 保留原始 tag 对象 {id, name, active}，供删除时反查 ID
 
 const loadFilters = async () => {
   try {
@@ -37,21 +31,96 @@ const loadFilters = async () => {
 
 const buildFilterItems = (tags) => {
   const active = tags.filter(t => t.active && t.name !== '全部')
-  filterItems.value = [
-    { name: '全部', active: true, icon: '📋' },
-    ...active.map(t => ({ name: t.name, active: false, icon: getTagIcon(t.name) })),
-  ]
+  tagObjects.value = active
+  filterItems.value = ['全部', ...active.map(t => t.name)]
 }
 
 const switchFilter = (index) => {
-  filterItems.value.forEach((item, i) => {
-    item.active = i === index
-  })
-  // 触发筛选
-  activeFilterName.value = filterItems.value[index]?.name || '全部'
+  if (isEditMode.value) return
+  activeFilterName.value = filterItems.value[index] || '全部'
 }
 
-// 4. 文章数据 + 标签筛选
+// ==================== 编辑模式：标签管理（仅管理员及以上可操作） ====================
+const isEditMode = ref(false)
+const newTagName = ref('')
+const tagEmojiWarning = ref(false)
+
+/** 检测字符串是否包含 emoji */
+function hasEmoji(str) {
+  return /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{FE0F}\u{238C}\u{23CF}\u{23E9}-\u{23F3}\u{23F8}-\u{23FA}\u{2B50}\u{2B55}\u{3030}\u{303D}\u{3297}\u{3299}]/u.test(str)
+}
+
+/** 进入/退出编辑模式（仅管理员及以上可操作） */
+const toggleEditMode = () => {
+  if (!currentIsAdmin()) return
+  isEditMode.value = !isEditMode.value
+  newTagName.value = ''
+}
+
+/** 删除标签 — API 优先，失败降级本地 */
+const removeTag = async (tagName) => {
+  const idx = filterItems.value.indexOf(tagName)
+  if (idx <= 0) return  // "全部" 不可删除
+
+  // 先本地移除（乐观更新）
+  filterItems.value.splice(idx, 1)
+
+  // 如果删除的是当前选中标签，重置为"全部"
+  if (activeFilterName.value === tagName) {
+    activeFilterName.value = '全部'
+  }
+
+  // 异步同步到服务端：按名称反查 ID
+  const tagObj = tagObjects.value.find(t => t.name === tagName)
+  try {
+    if (tagObj) {
+      await deleteCategoryTag(tagObj.id)
+    } else {
+      await deleteCategoryTag(tagName)
+    }
+  } catch { /* API 不可用时静默降级 */ }
+}
+
+/** 添加标签 — API 优先，emoji 限制，失败降级本地 */
+const addTag = async () => {
+  const name = newTagName.value.trim()
+  if (!name) return
+
+  // emoji 检测
+  if (hasEmoji(name)) {
+    tagEmojiWarning.value = true
+    setTimeout(() => { tagEmojiWarning.value = false }, 2500)
+    return
+  }
+
+  if (filterItems.value.includes(name)) {
+    newTagName.value = ''
+    return
+  }
+
+  // 先本地添加（乐观更新）
+  filterItems.value.push(name)
+  const tempId = -Date.now()
+  tagObjects.value.push({ id: tempId, name, active: true })
+  newTagName.value = ''
+  tagEmojiWarning.value = false
+
+  // 异步同步到服务端
+  try {
+    const created = await addCategoryTag(name)
+    if (created?.id) {
+      const obj = tagObjects.value.find(t => t.id === tempId)
+      if (obj) obj.id = created.id
+    }
+  } catch { /* API 不可用时静默降级 */ }
+}
+
+/** 添加标签的键盘事件 */
+const onAddTagKeyup = (e) => {
+  if (e.key === 'Enter') addTag()
+}
+
+// ==================== 文章数据 + 标签筛选 ====================
 const articles = ref([])
 const articlesLoading = ref(true)
 const refreshing = ref(false)
@@ -81,7 +150,7 @@ const filteredArticles = computed(() => {
   return list.map(a => ({ ...a, isCollected: isCollected(a.id) }))
 })
 
-// 5. 点赞功能（乐观更新 + API 同步）
+// ==================== 点赞功能（乐观更新 + API 同步） ====================
 const toggleLike = async (postId, event) => {
   if (event) event.stopPropagation()
   const post = articles.value.find(p => p.id === postId)
@@ -94,18 +163,18 @@ const toggleLike = async (postId, event) => {
   }
 }
 
-// 6. 收藏（接入全局 store，API 优先）
+// ==================== 收藏（接入全局 store，API 优先） ====================
 const toggleCollect = async (postId, event) => {
   if (event) event.stopPropagation()
   await toggleCollectStore(postId)
 }
 
-// 7. 跳转文章详情
+// ==================== 跳转文章详情 ====================
 const goToDetail = (id) => {
   router.push(`/article/${id}`)
 }
 
-// 8. 跳转发布页
+// ==================== 跳转发布页 ====================
 const goToPublish = () => {
   router.push('/publish')
 }
@@ -159,21 +228,52 @@ const onPullEnd = async () => {
 
     <!-- 2. 分类导航 -->
     <div class="category-tabs-wrapper" role="tablist" aria-label="技术分类">
-      <div
-        v-for="(item, index) in filterItems"
-        :key="index"
+      <span
+        v-for="(tag, index) in filterItems"
+        :key="tag"
         class="category-item"
-        :class="{ 'active': item.active }"
+        :class="{ active: activeFilterName === tag, editable: isEditMode && tag !== '全部' }"
         role="tab"
-        :aria-selected="item.active"
+        :aria-selected="activeFilterName === tag"
         tabindex="0"
         @click="switchFilter(index)"
         @keydown.enter.prevent="switchFilter(index)"
         @keydown.space.prevent="switchFilter(index)"
       >
-        <span class="icon">{{ item.icon }}</span>
-        <span class="name">{{ item.name }}</span>
-      </div>
+        {{ tag }}
+        <span
+          v-if="isEditMode && tag !== '全部'"
+          class="tag-delete"
+          role="button"
+          tabindex="0"
+          :aria-label="`删除标签 ${tag}`"
+          @click.stop="removeTag(tag)"
+          @keydown.enter.prevent.stop="removeTag(tag)"
+          @keydown.space.prevent.stop="removeTag(tag)"
+        >✕</span>
+      </span>
+
+      <!-- 编辑模式：添加标签输入区 -->
+      <span v-if="isEditMode" class="add-tag-group">
+        <input
+          v-model="newTagName"
+          type="text"
+          class="add-tag-input"
+          placeholder="新标签"
+          maxlength="10"
+          aria-label="新标签名称"
+          @keyup="onAddTagKeyup"
+        />
+        <span class="add-tag-btn" role="button" tabindex="0" aria-label="添加标签" @click="addTag" @keydown.enter.prevent="addTag" @keydown.space.prevent="addTag">➕</span>
+      </span>
+
+      <!-- emoji 警告提示 -->
+      <span v-if="isEditMode && tagEmojiWarning" class="emoji-warning" role="alert">⚠️ 标签不支持表情符号</span>
+
+      <!-- 标签管理入口（仅管理员及以上可见） -->
+      <span v-if="currentIsAdmin()" class="tag-admin-btn" role="button" tabindex="0" :aria-label="isEditMode ? '完成编辑' : '编辑标签'" @click="toggleEditMode" @keydown.enter.prevent="toggleEditMode" @keydown.space.prevent="toggleEditMode">
+        {{ isEditMode ? '✔️ 完成' : '✏️' }}
+      </span>
     </div>
 
     <!-- 3. 骨架屏（首次加载） -->
@@ -267,7 +367,6 @@ const onPullEnd = async () => {
 </template>
 
 <style scoped>
-/* 样式保持和之前完全一致，无需任何改变 */
 .home-view {
   background-color: var(--color-bg-page);
   min-height: 80vh;
@@ -320,12 +419,12 @@ const onPullEnd = async () => {
   padding-bottom: 8px;
   margin-bottom: 16px;
   white-space: nowrap;
-  /* 移动端惯性滚动 */
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: x proximity;
 }
 .category-tabs-wrapper::-webkit-scrollbar { display: none; }
 .category-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -348,8 +447,104 @@ const onPullEnd = async () => {
   border-color: var(--color-primary);
   font-weight: 500;
 }
-.category-item .icon { font-size: 14px; line-height: 1; }
-.category-item .name { line-height: 1; }
+.category-item.editable {
+  cursor: default;
+  padding-right: 24px;
+}
+.category-item.editable:active {
+  transform: none;
+}
+
+/* 删除按钮（编辑模式） */
+.tag-delete {
+  position: absolute;
+  top: -5px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  background: var(--color-error);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  line-height: 1;
+  transition: transform 0.15s;
+}
+.tag-delete:active { transform: scale(1.2); }
+
+/* 编辑模式：添加标签输入组 */
+.add-tag-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.add-tag-input {
+  width: 72px;
+  border: 1px dashed var(--color-border);
+  border-radius: 16px;
+  padding: 6px 10px;
+  font-size: 12px;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: inherit;
+}
+.add-tag-input:focus { border-color: var(--color-primary); }
+.add-tag-input::placeholder {
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+}
+.add-tag-btn {
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  user-select: none;
+  transition: transform 0.15s;
+}
+.add-tag-btn:active { transform: scale(1.2); }
+
+/* emoji 警告提示 */
+.emoji-warning {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  padding: 4px 10px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  animation: fadeInOut 2.5s ease;
+}
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translateY(-4px); }
+  15% { opacity: 1; transform: translateY(0); }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* 标签管理按钮 */
+.tag-admin-btn {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  user-select: none;
+  padding: 5px 10px;
+  border-radius: 14px;
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+  background: var(--color-bg-page);
+  transition: color 0.15s, background 0.15s;
+}
+.tag-admin-btn:active { background: var(--color-border); }
+.tag-admin-btn:hover { color: var(--color-primary); }
+
 .article-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -438,7 +633,6 @@ const onPullEnd = async () => {
   align-items: center;
   gap: 6px;
   padding: 12px 20px;
-  /* 毛玻璃效果 */
   background: rgba(37, 99, 235, 0.75);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -460,13 +654,8 @@ const onPullEnd = async () => {
     0 2px 8px rgba(37, 99, 235, 0.25),
     0 1px 2px rgba(0, 0, 0, 0.06);
 }
-.fab-icon {
-  font-size: 18px;
-  line-height: 1;
-}
-.fab-text {
-  white-space: nowrap;
-}
+.fab-icon { font-size: 18px; line-height: 1; }
+.fab-text { white-space: nowrap; }
 @media (min-width: 768px) { .article-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1024px) { .article-grid { grid-template-columns: repeat(3, 1fr); } }
 

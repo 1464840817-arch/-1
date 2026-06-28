@@ -1,44 +1,93 @@
 <!-- src/views/FriendManage.vue -->
-<!-- 好友管理 — 管理员列表 / 添加好友 / 删除好友 三个功能模块 -->
+<!-- 好友列表 — 默认展示好友列表，顶部展示待处理好友请求，三点菜单收纳管理操作 -->
 <script setup>
-import { ref, reactive, computed, onMounted, inject } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
-import { friendStore, initFriendData, isFriend, addToFriends, removeFromFriends } from '../store/friends.js'
+import { friendStore, initFriendData, loadFriendRequests, isFriend, addToFriends, acceptFriendRequest, declineFriendRequest, removeFromFriends } from '../store/friends.js'
 import { getAdminList, searchUsers } from '../api/friend.js'
 
 const router = useRouter()
 const toast = inject('showToast', null)
 
-// ==================== 视图切换 ====================
-const currentView = ref('menu') // 'menu' | 'admin' | 'add' | 'remove'
+// ==================== 导航与弹窗 ====================
+const showDotsMenu = ref(false)
+const activePopup = ref(null) // null | 'admin' | 'add' | 'remove'
+const dotsRef = ref(null)
 
-const goToView = (view) => {
-  currentView.value = view
-  // 重置各子视图状态
-  if (view === 'add') {
+const viewTitle = '好友列表'
+
+const toggleDotsMenu = () => {
+  showDotsMenu.value = !showDotsMenu.value
+}
+
+const openPopup = (type) => {
+  showDotsMenu.value = false
+  activePopup.value = type
+  if (type === 'add') {
     searchKeyword.value = ''
     searchResults.value = []
     hasSearched.value = false
   }
+  if (type === 'admin') {
+    loadAdmins()
+  }
+}
+
+const closePopup = () => {
+  activePopup.value = null
+  deleteConfirmId.value = null
 }
 
 const goBack = () => {
-  if (currentView.value !== 'menu') {
-    currentView.value = 'menu'
+  if (activePopup.value) {
+    closePopup()
   } else {
     router.back()
   }
 }
 
-// 子视图标题
-const viewTitle = computed(() => {
-  switch (currentView.value) {
-    case 'admin': return '管理员列表'
-    case 'add': return '添加好友'
-    case 'remove': return '删除好友'
-    default: return '好友管理'
+const goToUser = (id) => {
+  router.push(`/user/${id}`)
+}
+
+const goToChat = (friendId) => {
+  router.push(`/chat/${friendId}`)
+}
+
+const closeDotsMenu = (e) => {
+  if (dotsRef.value && !dotsRef.value.contains(e.target)) {
+    showDotsMenu.value = false
   }
+}
+
+onMounted(() => {
+  initFriendData()
+  loadFriendRequests()
+  document.addEventListener('click', closeDotsMenu)
 })
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeDotsMenu)
+})
+
+// ==================== 待处理好友请求 ====================
+const acceptingIds = ref(new Set())
+const decliningIds = ref(new Set())
+
+const handleAccept = async (req) => {
+  if (acceptingIds.value.has(req.senderId)) return
+  acceptingIds.value = new Set([...acceptingIds.value, req.senderId])
+  await acceptFriendRequest(req.senderId)
+  acceptingIds.value = new Set([...acceptingIds.value].filter(id => id !== req.senderId))
+  toast?.('已接受好友请求', 'success')
+}
+
+const handleDecline = async (req) => {
+  if (decliningIds.value.has(req.senderId)) return
+  decliningIds.value = new Set([...decliningIds.value, req.senderId])
+  await declineFriendRequest(req.senderId)
+  decliningIds.value = new Set([...decliningIds.value].filter(id => id !== req.senderId))
+}
 
 // ==================== 1. 管理员列表 ====================
 const admins = ref([])
@@ -66,7 +115,7 @@ const searchKeyword = ref('')
 const searchResults = ref([])
 const hasSearched = ref(false)
 const searching = ref(false)
-const addingIds = ref(new Set()) // 正在添加中的用户 ID
+const addingIds = ref(new Set())
 
 /** 搜索用户 */
 const handleSearch = async () => {
@@ -91,7 +140,7 @@ const onSearchKeyup = (e) => {
   if (e.key === 'Enter') handleSearch()
 }
 
-/** 添加好友 */
+/** 添加好友（发送请求） */
 const handleAddFriend = async (user) => {
   if (isFriend(user.id)) {
     toast?.('已经是好友了', 'success')
@@ -100,34 +149,34 @@ const handleAddFriend = async (user) => {
   if (addingIds.value.has(user.id)) return
 
   addingIds.value = new Set([...addingIds.value, user.id])
-  const ok = await addToFriends(user)
+  const res = await addToFriends(user)
   addingIds.value = new Set([...addingIds.value].filter(id => id !== user.id))
 
-  if (ok) {
-    toast?.('添加成功！', 'success')
+  if (res.status === 'accepted') {
+    toast?.('你们互相添加，已成为好友！', 'success')
+  } else if (res.status === 'requested') {
+    toast?.('好友请求已发送', 'success')
+  } else if (res.status === 'already_requested') {
+    toast?.('已发送过请求，请等待对方处理', 'success')
   } else {
-    toast?.('已是好友', 'success')
+    toast?.('操作成功', 'success')
   }
 }
 
-// 搜索结果中已添加的好友 ID 集合
 const resultFriendIds = computed(() => {
   return new Set(friendStore.list.map(f => f.id))
 })
 
 // ==================== 3. 删除好友 ====================
-const deleteConfirmId = ref(null) // 当前确认删除的好友 ID
+const deleteConfirmId = ref(null)
 
-/** 点击删除按钮 — 第一击进入确认态，第二击执行删除 */
 const requestDelete = (friendId) => {
   if (deleteConfirmId.value === friendId) {
-    // 二次确认通过，执行删除
     removeFromFriends(friendId)
     toast?.('已删除好友', 'success')
     deleteConfirmId.value = null
   } else {
     deleteConfirmId.value = friendId
-    // 3 秒后自动取消确认态
     setTimeout(() => {
       if (deleteConfirmId.value === friendId) {
         deleteConfirmId.value = null
@@ -136,230 +185,113 @@ const requestDelete = (friendId) => {
   }
 }
 
-/** 取消删除确认 */
 const cancelDelete = () => {
   deleteConfirmId.value = null
 }
-
-// ==================== 初始化 ====================
-onMounted(() => {
-  initFriendData()
-})
 </script>
 
 <template>
-  <main class="friend-page" aria-label="好友管理">
+  <main class="friend-page" aria-label="好友列表">
 
     <!-- ==================== 顶部导航 ==================== -->
     <header class="page-header">
-      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter.prevent="goBack" @keydown.space.prevent="goBack">
-        {{ currentView !== 'menu' ? '← 返回' : '⬅ 返回' }}
-      </span>
+      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter.prevent="goBack" @keydown.space.prevent="goBack">← 返回</span>
       <span class="title">{{ viewTitle }}</span>
-      <div class="header-placeholder"></div>
-    </header>
-
-    <!-- ====================================================================== -->
-    <!-- 菜单主页 -->
-    <!-- ====================================================================== -->
-    <template v-if="currentView === 'menu'">
-      <div class="menu-container">
-        <!-- 管理员管理 -->
-        <div class="menu-card" role="button" tabindex="0" @click="goToView('admin'); loadAdmins()" @keydown.enter.prevent="goToView('admin'); loadAdmins()" @keydown.space.prevent="goToView('admin'); loadAdmins()">
-          <div class="menu-left">
-            <span class="menu-icon-box menu-icon--purple">🛡️</span>
-            <div class="menu-info">
-              <span class="menu-label">管理员管理</span>
-              <span class="menu-sub">查看与联系平台管理员</span>
-            </div>
-          </div>
-          <span class="menu-arrow">›</span>
-        </div>
-
-        <!-- 添加好友 -->
-        <div class="menu-card" role="button" tabindex="0" @click="goToView('add')" @keydown.enter.prevent="goToView('add')" @keydown.space.prevent="goToView('add')">
-          <div class="menu-left">
-            <span class="menu-icon-box menu-icon--blue">➕</span>
-            <div class="menu-info">
-              <span class="menu-label">添加好友</span>
-              <span class="menu-sub">输入工号或姓名搜索添加</span>
-            </div>
-          </div>
-          <span class="menu-arrow">›</span>
-        </div>
-
-        <!-- 删除好友 -->
-        <div class="menu-card" role="button" tabindex="0" @click="goToView('remove')" @keydown.enter.prevent="goToView('remove')" @keydown.space.prevent="goToView('remove')">
-          <div class="menu-left">
-            <span class="menu-icon-box menu-icon--red">👥</span>
-            <div class="menu-info">
-              <span class="menu-label">删除好友</span>
-              <span class="menu-sub">管理已添加的好友列表</span>
-            </div>
-          </div>
-          <div class="menu-right">
-            <span v-if="friendStore.list.length > 0" class="friend-count">{{ friendStore.list.length }}人</span>
-            <span class="menu-arrow">›</span>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- ====================================================================== -->
-    <!-- 1. 管理员列表 -->
-    <!-- ====================================================================== -->
-    <template v-if="currentView === 'admin'">
-      <!-- 加载态 -->
-      <div v-if="adminsLoading" class="loading-state">
-        <span class="loading-spinner"></span>
-        <p class="loading-text">加载中...</p>
-      </div>
-
-      <!-- 管理员列表 -->
-      <div v-else class="user-list">
-        <div
-          v-for="admin in admins"
-          :key="admin.id"
-          class="user-card"
-          role="button"
-          tabindex="0"
-          @click="contactAdmin(admin)"
-          @keydown.enter.prevent="contactAdmin(admin)"
-          @keydown.space.prevent="contactAdmin(admin)"
+      <div ref="dotsRef" class="dots-menu-wrapper">
+        <button
+          class="dots-menu-btn"
+          :class="{ open: showDotsMenu }"
+          aria-label="更多操作"
+          @click.stop="toggleDotsMenu"
         >
-          <div class="user-avatar" :class="{ online: admin.isOnline }">
-            {{ admin.name[0] }}
-            <span v-if="admin.isOnline" class="online-dot"></span>
-          </div>
-          <div class="user-info">
-            <div class="user-name-line">
-              <span class="user-name">{{ admin.name }}</span>
-              <span class="user-role">{{ admin.role }}</span>
-            </div>
-            <span class="user-meta">{{ admin.department }} · {{ admin.account }}</span>
-            <span v-if="admin.phone" class="user-phone">{{ admin.phone }}</span>
-          </div>
-          <span class="contact-hint" role="button" tabindex="0" aria-label="联系管理员" @click.stop="contactAdmin(admin)" @keydown.enter.prevent.stop="contactAdmin(admin)" @keydown.space.prevent.stop="contactAdmin(admin)">联系</span>
-        </div>
-      </div>
-    </template>
-
-    <!-- ====================================================================== -->
-    <!-- 2. 添加好友 -->
-    <!-- ====================================================================== -->
-    <template v-if="currentView === 'add'">
-      <!-- 搜索栏 -->
-      <div class="search-bar">
-        <div class="search-input-wrap">
-          <span class="search-icon">🔍</span>
-          <input
-            v-model="searchKeyword"
-            type="text"
-            class="search-input"
-            aria-label="搜索用户"
-            placeholder="输入工号、姓名或部门搜索"
-            @keyup="onSearchKeyup"
-          />
-          <span
-            v-if="searchKeyword"
-            class="search-clear"
-            role="button"
-            tabindex="0"
-            aria-label="清除搜索"
-            @click="searchKeyword = ''; searchResults = []; hasSearched = false"
-            @keydown.enter.prevent="searchKeyword = ''; searchResults = []; hasSearched = false"
-            @keydown.space.prevent="searchKeyword = ''; searchResults = []; hasSearched = false"
-          >✕</span>
-        </div>
-        <button class="search-btn" :disabled="!searchKeyword.trim() || searching" @click="handleSearch">
-          {{ searching ? '搜索中' : '搜索' }}
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
         </button>
-      </div>
-
-      <!-- 搜索结果 -->
-      <div v-if="hasSearched" class="user-list">
-        <!-- 搜索中 -->
-        <div v-if="searching" class="loading-state">
-          <span class="loading-spinner"></span>
-          <p class="loading-text">搜索中...</p>
-        </div>
-
-        <!-- 空结果 -->
-        <div v-else-if="searchResults.length === 0" class="empty-inline">
-          <span class="empty-inline-icon">🔍</span>
-          <p class="empty-inline-text">未找到匹配的用户</p>
-          <p class="empty-inline-hint">试试换一个关键词</p>
-        </div>
-
-        <!-- 结果列表 -->
-        <div
-          v-for="user in searchResults"
-          :key="user.id"
-          class="user-card"
-        >
-          <div class="user-avatar" :class="{ online: user.isOnline }">
-            {{ user.name[0] }}
-            <span v-if="user.isOnline" class="online-dot"></span>
-          </div>
-          <div class="user-info">
-            <div class="user-name-line">
-              <span class="user-name">{{ user.name }}</span>
-              <span class="user-role">{{ user.role }}</span>
-            </div>
-            <span class="user-meta">{{ user.department }} · {{ user.account }}</span>
-          </div>
-          <button
-            v-if="resultFriendIds.has(user.id)"
-            class="add-btn added"
-            disabled
-          >已添加</button>
-          <button
-            v-else
-            class="add-btn"
-            :disabled="addingIds.has(user.id)"
-            @click="handleAddFriend(user)"
-          >
-            {{ addingIds.has(user.id) ? '…' : '添加' }}
+        <div v-if="showDotsMenu" class="dots-dropdown">
+          <button class="dropdown-item" @click="openPopup('admin')">
+            <span class="dropdown-icon">🛡️</span>
+            <span>管理员管理</span>
+          </button>
+          <button class="dropdown-item" @click="openPopup('add')">
+            <span class="dropdown-icon">➕</span>
+            <span>添加好友</span>
+          </button>
+          <button class="dropdown-item" @click="openPopup('remove')">
+            <span class="dropdown-icon">👥</span>
+            <span>删除好友</span>
           </button>
         </div>
       </div>
+    </header>
 
-      <!-- 未搜索时的引导 -->
-      <div v-else class="search-guide">
-        <span class="guide-icon">👥</span>
-        <p class="guide-text">输入同事的工号、姓名或部门</p>
-        <p class="guide-hint">找到后点击"添加"即可成为好友</p>
+    <!-- ====================================================================== -->
+    <!-- 主视图 -->
+    <!-- ====================================================================== -->
+    <template v-if="!activePopup">
+
+      <!-- ==================== 待处理好友请求 ==================== -->
+      <div v-if="friendStore.requests.length > 0" class="requests-section">
+        <div class="section-header">
+          <span class="section-title">🔴 新的朋友</span>
+          <span class="section-count">{{ friendStore.requests.length }} 条待处理</span>
+        </div>
+        <div class="requests-list">
+          <div
+            v-for="req in friendStore.requests"
+            :key="req.messageId"
+            class="request-card"
+          >
+            <div class="user-avatar" :class="{ online: req.isOnline }">
+              {{ req.sender[0] }}
+              <span v-if="req.isOnline" class="online-dot"></span>
+            </div>
+            <div class="user-info">
+              <div class="user-name-line">
+                <span class="user-name">{{ req.sender }}</span>
+                <span class="user-role">{{ req.role }}</span>
+              </div>
+              <span class="user-meta">{{ req.department || '未分配部门' }} · {{ req.account }}</span>
+              <span class="request-desc">{{ req.content }}</span>
+            </div>
+            <div class="request-actions">
+              <button
+                class="accept-btn"
+                :disabled="acceptingIds.has(req.senderId)"
+                @click.stop="handleAccept(req)"
+              >{{ acceptingIds.has(req.senderId) ? '…' : '接受' }}</button>
+              <button
+                class="decline-btn"
+                :disabled="decliningIds.has(req.senderId)"
+                @click.stop="handleDecline(req)"
+              >{{ decliningIds.has(req.senderId) ? '…' : '拒绝' }}</button>
+            </div>
+          </div>
+        </div>
       </div>
-    </template>
 
-    <!-- ====================================================================== -->
-    <!-- 3. 删除好友 -->
-    <!-- ====================================================================== -->
-    <template v-if="currentView === 'remove'">
-      <!-- 空状态 -->
-      <div v-if="friendStore.list.length === 0" class="empty-full">
+      <!-- ==================== 空状态 ==================== -->
+      <div v-if="friendStore.list.length === 0 && friendStore.requests.length === 0" class="empty-full">
         <span class="empty-full-icon">👥</span>
         <p class="empty-full-text">暂无好友</p>
-        <p class="empty-full-hint">去"添加好友"里搜索并添加同事吧</p>
-        <button class="go-add-btn" @click="goToView('add')">去添加好友</button>
+        <p class="empty-full-hint">可通过右上角菜单添加好友</p>
       </div>
 
-      <!-- 好友列表 -->
-      <div v-else class="user-list">
+      <!-- ==================== 好友列表 ==================== -->
+      <div v-else-if="friendStore.list.length > 0" class="user-list">
         <div class="list-header">
           <span class="list-header-text">共 {{ friendStore.list.length }} 位好友</span>
-          <span
-            v-if="deleteConfirmId"
-            class="cancel-confirm-btn"
-            @click="cancelDelete"
-          >取消删除</span>
         </div>
 
         <div
           v-for="friend in friendStore.list"
           :key="friend.id"
           class="user-card"
-          :class="{ 'confirm-delete': deleteConfirmId === friend.id }"
+          role="button"
+          tabindex="0"
+          @click="goToUser(friend.id)"
+          @keydown.enter.prevent="goToUser(friend.id)"
+          @keydown.space.prevent="goToUser(friend.id)"
         >
           <div class="user-avatar" :class="{ online: friend.isOnline }">
             {{ friend.name[0] }}
@@ -370,23 +302,224 @@ onMounted(() => {
               <span class="user-name">{{ friend.name }}</span>
               <span class="user-role">{{ friend.role }}</span>
             </div>
-            <span class="user-meta">{{ friend.department }} · {{ friend.account }}</span>
+            <span class="user-meta">{{ friend.department || '未分配部门' }} · {{ friend.account }}</span>
           </div>
-          <button
-            class="delete-btn"
-            :class="{ confirming: deleteConfirmId === friend.id }"
-            @click.stop="requestDelete(friend.id)"
-          >
-            {{ deleteConfirmId === friend.id ? '确认删除' : '删除' }}
-          </button>
+          <button class="chat-btn" @click.stop="goToChat(friend.id)">私聊</button>
         </div>
 
-        <!-- 底部安全区 -->
         <div class="list-bottom-hint">
-          <span>点击"删除"后再点"确认删除"即可移除好友</span>
+          <span>可通过右上角菜单管理好友</span>
         </div>
       </div>
     </template>
+
+    <!-- ====================================================================== -->
+    <!-- 弹出面板：管理员管理 -->
+    <!-- ====================================================================== -->
+    <Teleport to="body">
+      <transition name="modal">
+        <div v-if="activePopup === 'admin'" class="popup-overlay" role="dialog" aria-modal="true" aria-label="管理员列表" @click.self="closePopup">
+          <div class="popup-panel">
+            <header class="popup-header">
+              <span class="popup-title">管理员管理</span>
+              <button class="popup-close" @click="closePopup" aria-label="关闭">✕</button>
+            </header>
+
+            <div v-if="adminsLoading" class="loading-state">
+              <span class="loading-spinner"></span>
+              <p class="loading-text">加载中...</p>
+            </div>
+
+            <div v-else class="popup-body">
+              <div
+                v-for="admin in admins"
+                :key="admin.id"
+                class="user-card"
+                role="button"
+                tabindex="0"
+                @click="contactAdmin(admin)"
+                @keydown.enter.prevent="contactAdmin(admin)"
+                @keydown.space.prevent="contactAdmin(admin)"
+              >
+                <div class="user-avatar" :class="{ online: admin.isOnline }">
+                  {{ admin.name[0] }}
+                  <span v-if="admin.isOnline" class="online-dot"></span>
+                </div>
+                <div class="user-info">
+                  <div class="user-name-line">
+                    <span class="user-name">{{ admin.name }}</span>
+                    <span class="user-role">{{ admin.role }}</span>
+                  </div>
+                  <span class="user-meta">{{ admin.department || '' }} · {{ admin.account }}</span>
+                  <span v-if="admin.phone" class="user-phone">{{ admin.phone }}</span>
+                </div>
+                <span class="contact-hint" role="button" tabindex="0" aria-label="联系管理员" @click.stop="contactAdmin(admin)" @keydown.enter.prevent.stop="contactAdmin(admin)" @keydown.space.prevent.stop="contactAdmin(admin)">联系</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
+
+    <!-- ====================================================================== -->
+    <!-- 弹出面板：添加好友 -->
+    <!-- ====================================================================== -->
+    <Teleport to="body">
+      <transition name="modal">
+        <div v-if="activePopup === 'add'" class="popup-overlay" role="dialog" aria-modal="true" aria-label="添加好友" @click.self="closePopup">
+          <div class="popup-panel">
+            <header class="popup-header">
+              <span class="popup-title">添加好友</span>
+              <button class="popup-close" @click="closePopup" aria-label="关闭">✕</button>
+            </header>
+
+            <div class="popup-body">
+              <div class="search-bar">
+                <div class="search-input-wrap">
+                  <span class="search-icon">🔍</span>
+                  <input
+                    v-model="searchKeyword"
+                    type="text"
+                    class="search-input"
+                    aria-label="搜索用户"
+                    placeholder="输入工号、姓名或部门搜索"
+                    @keyup="onSearchKeyup"
+                  />
+                  <span
+                    v-if="searchKeyword"
+                    class="search-clear"
+                    role="button"
+                    tabindex="0"
+                    aria-label="清除搜索"
+                    @click="searchKeyword = ''; searchResults = []; hasSearched = false"
+                    @keydown.enter.prevent="searchKeyword = ''; searchResults = []; hasSearched = false"
+                    @keydown.space.prevent="searchKeyword = ''; searchResults = []; hasSearched = false"
+                  >✕</span>
+                </div>
+                <button class="search-btn" :disabled="!searchKeyword.trim() || searching" @click="handleSearch">
+                  {{ searching ? '搜索中' : '搜索' }}
+                </button>
+              </div>
+
+              <div v-if="hasSearched" class="popup-user-list">
+                <div v-if="searching" class="loading-state">
+                  <span class="loading-spinner"></span>
+                  <p class="loading-text">搜索中...</p>
+                </div>
+
+                <div v-else-if="searchResults.length === 0" class="empty-inline">
+                  <span class="empty-inline-icon">🔍</span>
+                  <p class="empty-inline-text">未找到匹配的用户</p>
+                  <p class="empty-inline-hint">试试换一个关键词</p>
+                </div>
+
+                <div
+                  v-for="user in searchResults"
+                  :key="user.id"
+                  class="user-card"
+                >
+                  <div class="user-avatar" :class="{ online: user.isOnline }">
+                    {{ user.name[0] }}
+                    <span v-if="user.isOnline" class="online-dot"></span>
+                  </div>
+                  <div class="user-info">
+                    <div class="user-name-line">
+                      <span class="user-name">{{ user.name }}</span>
+                      <span class="user-role">{{ user.role }}</span>
+                    </div>
+                    <span class="user-meta">{{ user.department || '' }} · {{ user.account }}</span>
+                  </div>
+                  <button
+                    v-if="resultFriendIds.has(user.id)"
+                    class="add-btn added"
+                    disabled
+                  >已添加</button>
+                  <button
+                    v-else
+                    class="add-btn"
+                    :disabled="addingIds.has(user.id)"
+                    @click="handleAddFriend(user)"
+                  >
+                    {{ addingIds.has(user.id) ? '…' : '添加' }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-else class="search-guide">
+                <span class="guide-icon">👥</span>
+                <p class="guide-text">输入同事的工号、姓名或部门</p>
+                <p class="guide-hint">找到后点击"添加"即可发送好友请求</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
+
+    <!-- ====================================================================== -->
+    <!-- 弹出面板：删除好友 -->
+    <!-- ====================================================================== -->
+    <Teleport to="body">
+      <transition name="modal">
+        <div v-if="activePopup === 'remove'" class="popup-overlay" role="dialog" aria-modal="true" aria-label="删除好友" @click.self="closePopup">
+          <div class="popup-panel">
+            <header class="popup-header">
+              <span class="popup-title">删除好友</span>
+              <button class="popup-close" @click="closePopup" aria-label="关闭">✕</button>
+            </header>
+
+            <div class="popup-body">
+              <div v-if="friendStore.list.length === 0" class="empty-full">
+                <span class="empty-full-icon">👥</span>
+                <p class="empty-full-text">暂无好友</p>
+                <p class="empty-full-hint">去"添加好友"里搜索并添加同事吧</p>
+              </div>
+
+              <div v-else class="popup-user-list">
+                <div class="list-header">
+                  <span class="list-header-text">共 {{ friendStore.list.length }} 位好友</span>
+                  <span
+                    v-if="deleteConfirmId"
+                    class="cancel-confirm-btn"
+                    @click="cancelDelete"
+                  >取消删除</span>
+                </div>
+
+                <div
+                  v-for="friend in friendStore.list"
+                  :key="friend.id"
+                  class="user-card"
+                  :class="{ 'confirm-delete': deleteConfirmId === friend.id }"
+                >
+                  <div class="user-avatar" :class="{ online: friend.isOnline }">
+                    {{ friend.name[0] }}
+                    <span v-if="friend.isOnline" class="online-dot"></span>
+                  </div>
+                  <div class="user-info">
+                    <div class="user-name-line">
+                      <span class="user-name">{{ friend.name }}</span>
+                      <span class="user-role">{{ friend.role }}</span>
+                    </div>
+                    <span class="user-meta">{{ friend.department || '未分配部门' }} · {{ friend.account }}</span>
+                  </div>
+                  <button
+                    class="delete-btn"
+                    :class="{ confirming: deleteConfirmId === friend.id }"
+                    @click.stop="requestDelete(friend.id)"
+                  >
+                    {{ deleteConfirmId === friend.id ? '确认删除' : '删除' }}
+                  </button>
+                </div>
+
+                <div class="list-bottom-hint">
+                  <span>点击"删除"后再点"确认删除"即可移除好友</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
 
   </main>
 </template>
@@ -422,88 +555,207 @@ onMounted(() => {
   font-weight: 600;
   color: var(--color-text-primary);
 }
-.header-placeholder { width: 40px; }
 
-/* ==================== 菜单主页 ==================== */
-.menu-container {
-  margin: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 720px;
-  margin-left: auto;
-  margin-right: auto;
+/* ==================== 三点菜单 ==================== */
+.dots-menu-wrapper {
+  position: relative;
 }
-
-.menu-card {
-  background: var(--color-bg-card);
-  border-radius: 12px;
-  padding: 16px;
+.dots-menu-btn {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  gap: 2px;
+  padding: 10px 6px;
+  border: none;
+  background: transparent;
   cursor: pointer;
-  transition: all 0.15s;
+  border-radius: 6px;
+  transition: background 0.15s;
 }
-.menu-card:active {
+.dots-menu-btn:hover,
+.dots-menu-btn:active,
+.dots-menu-btn.open {
   background: var(--color-bg-page);
-  transform: scale(0.98);
 }
-
-.menu-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
+.dots-menu-btn .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-text-primary);
+  flex-shrink: 0;
 }
-.menu-right {
+.dots-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 150px;
+  background: var(--color-bg-card);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  overflow: hidden;
+  z-index: 300;
+  animation: dropdown-in 0.15s ease;
+}
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dropdown-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  padding: 11px 16px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: left;
 }
-
-.menu-icon-box {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 22px;
+.dropdown-item:hover,
+.dropdown-item:active {
+  background: var(--color-bg-page);
+}
+.dropdown-icon {
+  font-size: 15px;
   flex-shrink: 0;
 }
-.menu-icon--purple { background: #ede9fe; }
-.menu-icon--blue   { background: var(--color-primary-light); }
-.menu-icon--red    { background: #fee2e2; }
 
-.menu-info {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+/* ==================== 待处理好友请求 ==================== */
+.requests-section {
+  padding: 8px 16px;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+  box-sizing: border-box;
 }
-.menu-label {
-  font-size: 15px;
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 4px 4px 4px;
+}
+.section-title {
+  font-size: 14px;
   font-weight: 600;
   color: var(--color-text-primary);
 }
-.menu-sub {
-  font-size: 13px;
-  color: var(--color-text-tertiary);
+.section-count {
+  font-size: 12px;
+  color: var(--color-error);
+  font-weight: 500;
 }
-.menu-arrow {
-  font-size: 20px;
-  color: var(--color-text-tertiary);
-  transition: transform 0.2s;
+.requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
 }
-.menu-card:active .menu-arrow {
-  transform: translateX(3px);
+.request-card {
+  background: var(--color-bg-card);
+  border: 1px solid #FECACA;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(239,68,68,0.06);
 }
-.friend-count {
+.request-desc {
   font-size: 12px;
   color: var(--color-text-tertiary);
-  background: var(--color-bg-page);
-  padding: 2px 8px;
-  border-radius: 10px;
+  display: block;
+  margin-top: 2px;
+}
+.request-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.accept-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.accept-btn:active:not(:disabled) { opacity: 0.8; }
+.accept-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.decline-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.decline-btn:active:not(:disabled) {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+.decline-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ==================== 弹窗面板 ==================== */
+.popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.popup-panel {
+  width: 100%;
+  max-width: 500px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-card);
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
+}
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-divider);
+  flex-shrink: 0;
+}
+.popup-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+.popup-close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.popup-body {
+  overflow-y: auto;
+  flex: 1;
 }
 
 /* ==================== 加载态 ==================== */
@@ -533,9 +785,6 @@ onMounted(() => {
   padding: 16px;
   display: flex;
   gap: 10px;
-  max-width: 720px;
-  margin-left: auto;
-  margin-right: auto;
   width: 100%;
   box-sizing: border-box;
 }
@@ -543,7 +792,7 @@ onMounted(() => {
   flex: 1;
   display: flex;
   align-items: center;
-  background: var(--color-bg-card);
+  background: var(--color-bg-page);
   border-radius: 10px;
   padding: 0 12px;
   border: 1px solid var(--color-border);
@@ -590,7 +839,6 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
-/* 搜索前引导 */
 .search-guide {
   display: flex;
   flex-direction: column;
@@ -603,8 +851,9 @@ onMounted(() => {
 .guide-hint { font-size: 13px; color: var(--color-text-tertiary); margin: 0; }
 
 /* ==================== 用户列表 ==================== */
-.user-list {
-  padding: 0 16px;
+.user-list,
+.popup-user-list {
+  padding: 4px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -613,6 +862,10 @@ onMounted(() => {
   margin-right: auto;
   width: 100%;
   box-sizing: border-box;
+}
+.popup-user-list {
+  max-width: none;
+  padding-bottom: 28px;
 }
 
 .list-header {
@@ -722,6 +975,25 @@ onMounted(() => {
   background: #dbeafe;
 }
 
+/* 私聊按钮 */
+.chat-btn {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--color-primary);
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.chat-btn:active {
+  background: var(--color-primary);
+  color: #fff;
+}
+
 /* 添加按钮 */
 .add-btn {
   font-size: 13px;
@@ -784,7 +1056,6 @@ onMounted(() => {
 }
 
 /* ==================== 空状态 ==================== */
-/* 行内空状态 */
 .empty-inline {
   display: flex;
   flex-direction: column;
@@ -796,7 +1067,6 @@ onMounted(() => {
 .empty-inline-text { font-size: 15px; color: var(--color-text-secondary); margin: 0 0 4px 0; }
 .empty-inline-hint { font-size: 13px; color: var(--color-text-tertiary); margin: 0; }
 
-/* 满屏空状态 */
 .empty-full {
   display: flex;
   flex-direction: column;
@@ -816,5 +1086,25 @@ onMounted(() => {
   font-size: 14px;
   cursor: pointer;
   font-family: inherit;
+}
+
+/* ==================== 弹窗过渡动画 ==================== */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.25s ease;
+}
+.modal-enter-active .popup-panel,
+.modal-leave-active .popup-panel {
+  transition: transform 0.25s ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-from .popup-panel {
+  transform: translateY(100%);
+}
+.modal-leave-to .popup-panel {
+  transform: translateY(100%);
 }
 </style>

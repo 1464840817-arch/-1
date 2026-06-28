@@ -135,6 +135,15 @@ CREATE TABLE IF NOT EXISTS user_likes (
   PRIMARY KEY (user_id, target_type, target_id),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS operation_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  operator TEXT NOT NULL,
+  operator_role TEXT NOT NULL,
+  action TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `
 
 // ==================== 初始化 ====================
@@ -172,6 +181,8 @@ export async function initDb() {
     try { db.run('ALTER TABLE users ADD COLUMN department TEXT NOT NULL DEFAULT \'\'') } catch { /* 列已存在 */ }
     try { db.run('ALTER TABLE users ADD COLUMN last_active TEXT NOT NULL DEFAULT \'\'') } catch { /* 列已存在 */ }
     try { db.run('CREATE TABLE IF NOT EXISTS user_likes (user_id INTEGER NOT NULL, target_type TEXT NOT NULL, target_id INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime(\'now\')), PRIMARY KEY (user_id, target_type, target_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)') } catch { /* 表已存在 */ }
+    try { db.run("ALTER TABLE articles ADD COLUMN status TEXT NOT NULL DEFAULT 'published'") } catch { /* 列已存在 */ }
+    try { db.run('CREATE TABLE IF NOT EXISTS operation_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, operator TEXT NOT NULL, operator_role TEXT NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL DEFAULT \'\', created_at TEXT NOT NULL DEFAULT (datetime(\'now\')))') } catch { /* 表已存在 */ }
 
     persist()
 

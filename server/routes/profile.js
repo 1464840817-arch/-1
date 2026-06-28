@@ -157,7 +157,7 @@ export default async function profileRoutes(fastify) {
 
   /**
    * GET /user/stats
-   * 当前用户的文章聚合统计
+   * 当前用户的文章聚合统计（仅统计已发布文章）
    */
   fastify.get('/user/stats', { preHandler: authGuard }, async (request) => {
     const row = queryOne(
@@ -166,9 +166,121 @@ export default async function profileRoutes(fastify) {
          COALESCE(SUM(views), 0)     AS total_views,
          COALESCE(SUM(comments), 0)  AS total_comments,
          COUNT(*)                    AS total_posts
-       FROM articles WHERE author = ?`,
+       FROM articles WHERE author = ? AND status = 'published'`,
       [request.user.name],
     )
     return row || { total_likes: 0, total_views: 0, total_comments: 0, total_posts: 0 }
   })
+
+  /**
+   * GET /users/:id
+   * 获取任意用户的公开资料（需登录）
+   */
+  fastify.get('/users/:id', { preHandler: authGuard }, async (request, reply) => {
+    const userId = parseInt(request.params.id, 10)
+    const row = queryOne(
+      'SELECT id, account, name, avatar, role, department, desc FROM users WHERE id = ? AND disabled = 0',
+      [userId],
+    )
+    if (!row) {
+      return reply.status(404).send({ message: '用户不存在' })
+    }
+
+    // 检查当前用户是否已添加对方为好友
+    const isFriend = !!queryOne(
+      'SELECT 1 FROM user_friends WHERE user_id = ? AND friend_id = ?',
+      [request.user.userId, userId],
+    )
+
+    return {
+      id: row.id,
+      account: row.account,
+      name: row.name,
+      avatar: row.avatar || '',
+      role: row.role,
+      department: row.department || '',
+      desc: row.desc || '',
+      isFriend,
+    }
+  })
+
+  /**
+   * GET /users/:id/posts
+   * 获取任意用户已发布的文章列表（需登录）
+   */
+  fastify.get('/users/:id/posts', { preHandler: authGuard }, async (request, reply) => {
+    const userId = parseInt(request.params.id, 10)
+    const { page = '1', pageSize = '20' } = request.query
+    const limit = Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 100)
+    const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit
+
+    const targetUser = queryOne('SELECT name FROM users WHERE id = ? AND disabled = 0', [userId])
+    if (!targetUser) {
+      return reply.status(404).send({ message: '用户不存在' })
+    }
+
+    const { total } = queryOne(
+      "SELECT COUNT(*) as total FROM articles WHERE author = ? AND status = 'published'",
+      [targetUser.name],
+    ) || { total: 0 }
+
+    const rows = queryAll(
+      "SELECT * FROM articles WHERE author = ? AND status = 'published' ORDER BY date DESC LIMIT ? OFFSET ?",
+      [targetUser.name, limit, offset],
+    )
+
+    return {
+      list: rows.map(r => ({
+        id: r.id,
+        type: r.type,
+        title: r.title,
+        desc: r.desc,
+        author: r.author,
+        date: r.date,
+        likes: r.likes,
+        comments: r.comments,
+        views: r.views,
+        tags: safeParseProfile(r.tags, []),
+      })),
+      total,
+      page: parseInt(page, 10) || 1,
+      pageSize: limit,
+    }
+  })
+
+  /**
+   * POST /users/:id/message
+   * Body: { content: string }
+   * 发送私信给指定用户（需登录）
+   */
+  fastify.post('/users/:id/message', { preHandler: authGuard }, async (request, reply) => {
+    const userId = parseInt(request.params.id, 10)
+    const { content } = request.body || {}
+
+    if (!content || !content.trim()) {
+      return reply.status(400).send({ message: '消息内容不能为空' })
+    }
+
+    // 不能给自己发私信
+    if (userId === request.user.userId) {
+      return reply.status(400).send({ message: '不能给自己发私信' })
+    }
+
+    const targetUser = queryOne('SELECT id, name FROM users WHERE id = ? AND disabled = 0', [userId])
+    if (!targetUser) {
+      return reply.status(404).send({ message: '用户不存在' })
+    }
+
+    execute(
+      `INSERT INTO messages (user_id, type, sender, action, content, target_id)
+       VALUES (?, 'chat', ?, '发来一条私信', ?, ?)`,
+      [userId, request.user.name, content.trim(), request.user.userId],
+    )
+
+    return { ok: true }
+  })
+}
+
+function safeParseProfile(str, fallback) {
+  try { return JSON.parse(str) } catch { return fallback }
 }

@@ -7,7 +7,7 @@ import {
   SUPER_ADMIN, ENGINEER, ENGINEER_LI,
   makeToken, authedRequest, json,
 } from './helpers.js'
-import { execute } from '../db.js'
+import { execute, queryOne } from '../db.js'
 
 let fastify
 let adminToken
@@ -134,6 +134,36 @@ describe('PUT /articles/:id — 更新文章', () => {
 
     expect(res.statusCode).toBe(403)
   })
+
+  it('管理员应该能编辑他人文章', async () => {
+    const res = await fastify.inject({
+      method: 'PUT',
+      url: '/articles/1',
+      payload: { title: '管理员修改的标题' },
+      headers: { authorization: adminToken },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(json(res).title).toBe('管理员修改的标题')
+  })
+
+  it('管理员编辑他人文章后应通知作者', async () => {
+    const res = await fastify.inject({
+      method: 'PUT',
+      url: '/articles/1',
+      payload: { title: '再次修改' },
+      headers: { authorization: adminToken },
+    })
+
+    expect(res.statusCode).toBe(200)
+
+    // 检查数据库中的通知消息
+    const msg = queryOne(
+      "SELECT * FROM messages WHERE user_id = ? AND type = 'system' AND action = '修改了你的文章' AND target_id = 1",
+      [ENGINEER.id],
+    )
+    expect(msg).toBeTruthy()
+  })
 })
 
 describe('DELETE /articles/:id — 删除文章', () => {
@@ -174,6 +204,40 @@ describe('DELETE /articles/:id — 删除文章', () => {
     })
 
     expect(res.statusCode).toBe(403)
+  })
+
+  it('管理员下架他人文章后应通知作者', async () => {
+    const res = await fastify.inject({
+      method: 'DELETE',
+      url: '/articles/1',
+      headers: { authorization: adminToken },
+    })
+
+    expect(res.statusCode).toBe(200)
+
+    // 检查数据库中的通知消息
+    const msg = queryOne(
+      "SELECT * FROM messages WHERE user_id = ? AND type = 'system' AND action = '下架了你的文章' AND target_id = 1",
+      [ENGINEER.id],
+    )
+    expect(msg).toBeTruthy()
+  })
+
+  it('作者本人下架文章不应给自己发通知', async () => {
+    const res = await fastify.inject({
+      method: 'DELETE',
+      url: '/articles/1',
+      headers: { authorization: engToken },
+    })
+
+    expect(res.statusCode).toBe(200)
+
+    // 作者本人删除，不应该有通知
+    const msg = queryOne(
+      "SELECT * FROM messages WHERE user_id = ? AND type = 'system' AND action = '下架了你的文章' AND target_id = 1",
+      [ENGINEER.id],
+    )
+    expect(msg).toBeNull()
   })
 })
 

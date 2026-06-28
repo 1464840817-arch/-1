@@ -61,6 +61,12 @@ const tagObjects = ref([])   // 保留原始 tag 对象 {id, name, active}，供
 const activeTag = ref('全部')
 const isEditMode = ref(false)
 const newTagName = ref('')
+const tagEmojiWarning = ref(false)
+
+/** 检测字符串是否包含 emoji */
+function hasEmoji(str) {
+  return /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{FE0F}\u{238C}\u{23CF}\u{23E9}-\u{23F3}\u{23F8}-\u{23FA}\u{2B50}\u{2B55}\u{3030}\u{303D}\u{3297}\u{3299}]/u.test(str)
+}
 
 /** 从 API 数据构建标签列表 */
 const buildFilterTags = (tags) => {
@@ -127,6 +133,14 @@ const removeTag = async (tagName) => {
 const addTag = async () => {
   const name = newTagName.value.trim()
   if (!name) return
+
+  // emoji 检测
+  if (hasEmoji(name)) {
+    tagEmojiWarning.value = true
+    setTimeout(() => { tagEmojiWarning.value = false }, 2500)
+    return
+  }
+
   if (filterTags.value.includes(name)) {
     newTagName.value = ''
     return
@@ -138,6 +152,7 @@ const addTag = async () => {
   const tempId = -Date.now()
   tagObjects.value.push({ id: tempId, name, active: true })
   newTagName.value = ''
+  tagEmojiWarning.value = false
 
   // 异步同步到服务端，用真实 ID 替换临时 ID
   try {
@@ -363,6 +378,9 @@ onUnmounted(() => {
           />
           <span class="add-tag-btn" role="button" tabindex="0" aria-label="添加标签" @click="addTag" @keydown.enter.prevent="addTag" @keydown.space.prevent="addTag">➕</span>
         </span>
+
+        <!-- emoji 警告提示 -->
+        <span v-if="isEditMode && tagEmojiWarning" class="emoji-warning" role="alert">⚠️ 标签不支持表情符号</span>
 
         <!-- 标签管理入口（仅管理员及以上可见，置于标签栏右上方） -->
         <span v-if="currentIsAdmin()" class="tag-admin-btn" role="button" tabindex="0" :aria-label="isEditMode ? '完成编辑' : '编辑标签'" @click="toggleEditMode" @keydown.enter.prevent="toggleEditMode" @keydown.space.prevent="toggleEditMode">
@@ -723,6 +741,25 @@ onUnmounted(() => {
   transition: transform 0.15s;
 }
 .add-tag-btn:active { transform: scale(1.2); }
+
+/* emoji 警告提示 */
+.emoji-warning {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  padding: 4px 10px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  animation: fadeInOut 2.5s ease;
+}
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translateY(-4px); }
+  15% { opacity: 1; transform: translateY(0); }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
 
 /* 标签管理按钮（位于标签栏右侧） */
 .tag-admin-btn {

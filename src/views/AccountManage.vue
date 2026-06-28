@@ -5,7 +5,7 @@ import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { userStore, currentIsSuperAdmin } from '../store/user.js'
 import { ROLES, ROLE_LABELS } from '../store/auth.js'
-import { getUserList, createUser, setUserStatus, deleteUser } from '../api/auth.js'
+import { getUserList, createUser, setUserStatus, deleteUser, resetPassword } from '../api/auth.js'
 
 const router = useRouter()
 const toast = inject('showToast', null)
@@ -13,6 +13,7 @@ const toast = inject('showToast', null)
 // ==================== 用户列表 ====================
 const users = ref([])
 const loading = ref(false)
+const loadError = ref('')
 const roleFilter = ref('all') // 'all' | ROLES.ENGINEER | ROLES.ADMIN | ROLES.SUPER_ADMIN
 
 const filteredUsers = computed(() => {
@@ -24,11 +25,14 @@ const isSuperAdmin = computed(() => currentIsSuperAdmin())
 
 const loadUsers = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const data = await getUserList()
     users.value = Array.isArray(data?.list) ? data.list : (Array.isArray(data) ? data : [])
-  } catch {
+  } catch (err) {
     users.value = []
+    loadError.value = err.message || '加载失败'
+    console.error('用户列表加载失败:', err)
   } finally {
     loading.value = false
   }
@@ -168,6 +172,51 @@ const cancelConfirm = () => {
   confirmDeleteId.value = null
 }
 
+// ==================== 重置密码对话框 ====================
+const showPwdDialog = ref(false)
+const pwdTarget = ref(null) // 目标用户
+const pwdForm = reactive({
+  newPassword: '',
+  confirmPassword: '',
+})
+const pwdErrors = ref({})
+const resetting = ref(false)
+
+const openPwdDialog = (user) => {
+  pwdTarget.value = user
+  pwdForm.newPassword = ''
+  pwdForm.confirmPassword = ''
+  pwdErrors.value = {}
+  showPwdDialog.value = true
+}
+
+const closePwdDialog = () => {
+  showPwdDialog.value = false
+  pwdTarget.value = null
+}
+
+const validatePwd = () => {
+  const errs = {}
+  if (!pwdForm.newPassword || pwdForm.newPassword.length < 6) errs.newPassword = '密码至少 6 位'
+  if (pwdForm.newPassword !== pwdForm.confirmPassword) errs.confirmPassword = '两次输入的密码不一致'
+  pwdErrors.value = errs
+  return Object.keys(errs).length === 0
+}
+
+const handleResetPwd = async () => {
+  if (!validatePwd() || resetting.value || !pwdTarget.value) return
+  resetting.value = true
+  try {
+    await resetPassword(pwdTarget.value.id, pwdForm.newPassword)
+    toast?.('密码已重置', 'success')
+    closePwdDialog()
+  } catch (err) {
+    toast?.(err.message || '密码重置失败', 'error')
+  } finally {
+    resetting.value = false
+  }
+}
+
 // ==================== 返回 ====================
 const goBack = () => router.back()
 
@@ -210,6 +259,13 @@ onMounted(() => { loadUsers() })
       <span class="loading-spinner"></span>
     </div>
 
+    <!-- 错误态 -->
+    <div v-else-if="loadError" class="message-state">
+      <span class="message-icon">⚠️</span>
+      <p class="message-text">{{ loadError }}</p>
+      <button class="retry-btn" @click="loadUsers">重试</button>
+    </div>
+
     <!-- 用户列表 -->
     <div v-else class="user-list">
       <div
@@ -242,6 +298,13 @@ onMounted(() => { loadUsers() })
         </div>
         <div class="user-actions">
           <button
+            v-if="isSuperAdmin && user.account !== userStore.account"
+            class="action-btn pwd-btn"
+            @click="openPwdDialog(user)"
+          >
+            密码
+          </button>
+          <button
             class="action-btn toggle-btn"
             :class="{ active: user.disabled }"
             @click="handleToggleStatus(user)"
@@ -264,6 +327,53 @@ onMounted(() => { loadUsers() })
         <p class="empty-text">暂无该角色用户</p>
       </div>
     </div>
+
+    <!-- ==================== 重置密码对话框 ==================== -->
+    <teleport to="body">
+      <transition name="modal">
+        <div v-if="showPwdDialog" class="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="pwd-dialog-title" @click.self="closePwdDialog" @keydown.escape="closePwdDialog">
+          <div class="dialog-card">
+            <h3 id="pwd-dialog-title" class="dialog-title">重置密码</h3>
+            <p class="dialog-hint">为 <strong>{{ pwdTarget?.name }}</strong>（{{ pwdTarget?.account }}）设置新密码</p>
+
+            <label class="dialog-label" for="pwd-new">新密码</label>
+            <input
+              id="pwd-new"
+              v-model="pwdForm.newPassword"
+              type="password"
+              class="dialog-input"
+              :class="{ error: pwdErrors.newPassword }"
+              placeholder="至少 6 位"
+              aria-label="新密码"
+              aria-required="true"
+              :aria-describedby="pwdErrors.newPassword ? 'pwd-new-err' : undefined"
+            />
+            <span v-if="pwdErrors.newPassword" id="pwd-new-err" class="field-err">{{ pwdErrors.newPassword }}</span>
+
+            <label class="dialog-label" for="pwd-confirm">确认密码</label>
+            <input
+              id="pwd-confirm"
+              v-model="pwdForm.confirmPassword"
+              type="password"
+              class="dialog-input"
+              :class="{ error: pwdErrors.confirmPassword }"
+              placeholder="再次输入新密码"
+              aria-label="确认密码"
+              aria-required="true"
+              :aria-describedby="pwdErrors.confirmPassword ? 'pwd-confirm-err' : undefined"
+            />
+            <span v-if="pwdErrors.confirmPassword" id="pwd-confirm-err" class="field-err">{{ pwdErrors.confirmPassword }}</span>
+
+            <div class="dialog-btns">
+              <button class="dialog-btn cancel" @click="closePwdDialog">取消</button>
+              <button class="dialog-btn confirm" :disabled="resetting" @click="handleResetPwd">
+                {{ resetting ? '重置中…' : '确认重置' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </teleport>
 
     <!-- ==================== 创建用户对话框 ==================== -->
     <teleport to="body">
@@ -557,6 +667,13 @@ onMounted(() => { loadUsers() })
   color: var(--color-success);
   border-color: var(--color-success);
 }
+.pwd-btn {
+  color: #6d28d9;
+  border-color: #d4c4f0;
+}
+.pwd-btn:hover {
+  background: #f5f3ff;
+}
 .delete-btn {
   color: var(--color-text-tertiary);
 }
@@ -564,6 +681,31 @@ onMounted(() => { loadUsers() })
   background: var(--color-error);
   color: #fff;
   border-color: var(--color-error);
+}
+
+/* --- 消息态（错误） --- */
+.message-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80px 16px;
+  gap: 12px;
+}
+.message-icon { font-size: 40px; }
+.message-text {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+.retry-btn {
+  font-size: 13px;
+  color: #fff;
+  background: var(--color-primary);
+  border: none;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 /* --- 空状态 --- */
@@ -601,6 +743,15 @@ onMounted(() => { loadUsers() })
   color: var(--color-text-primary);
   margin: 0 0 16px 0;
   text-align: center;
+}
+.dialog-hint {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  text-align: center;
+  margin: -8px 0 8px 0;
+}
+.dialog-hint strong {
+  color: var(--color-text-primary);
 }
 .dialog-label {
   display: block;

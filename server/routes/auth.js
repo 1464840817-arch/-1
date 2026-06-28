@@ -69,6 +69,7 @@ export default async function authRoutes(fastify) {
       refreshToken,
       name: user.name,
       role: user.role,
+      account: user.account,
     }
   })
 
@@ -113,6 +114,9 @@ export default async function authRoutes(fastify) {
     return {
       token: accessToken,
       refreshToken,
+      name: record.name,
+      role: record.role,
+      account: record.account,
     }
   })
 

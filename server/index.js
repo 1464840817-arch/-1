@@ -21,8 +21,10 @@ import tenantRoutes from './routes/tenant.js'
 import articleRoutes from './routes/article.js'
 import messageRoutes from './routes/message.js'
 import friendRoutes from './routes/friend.js'
+import chatRoutes from './routes/chat.js'
 import profileRoutes from './routes/profile.js'
 import adminRoutes from './routes/admin.js'
+import operationLogRoutes from './routes/operationLogs.js'
 import seed from './seed.js'
 
 const fastify = Fastify({
@@ -79,9 +81,11 @@ try {
   await fastify.register(articleRoutes)
   await fastify.register(messageRoutes)
   await fastify.register(friendRoutes)
+  await fastify.register(chatRoutes)
   await fastify.register(profileRoutes)
   await fastify.register(adminRoutes)
-  fastify.log.info('11 组路由已注册')
+  await fastify.register(operationLogRoutes)
+  fastify.log.info('13 组路由已注册')
 
   // 4. 头像静态文件服务
   const MIME_MAP = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' }

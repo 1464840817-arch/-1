@@ -28,6 +28,7 @@ beforeEach(async () => {
   try { db.run('ALTER TABLE users ADD COLUMN department TEXT NOT NULL DEFAULT \'\'') } catch { /* 已存在 */ }
   try { db.run('ALTER TABLE users ADD COLUMN last_active TEXT NOT NULL DEFAULT \'\'') } catch { /* 已存在 */ }
   try { db.run("CREATE TABLE IF NOT EXISTS user_likes (user_id INTEGER NOT NULL, target_type TEXT NOT NULL, target_id INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (user_id, target_type, target_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)") } catch { /* 已存在 */ }
+  try { db.run("ALTER TABLE articles ADD COLUMN status TEXT NOT NULL DEFAULT 'published'") } catch { /* 已存在 */ }
   __setDbForTest(db)
 })
 

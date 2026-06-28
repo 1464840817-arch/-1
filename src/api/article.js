@@ -72,3 +72,33 @@ export function incrementView(id) {
 export function likeArticle(id) {
   return request(`/articles/${id}/like`, { method: 'POST' })
 }
+
+/**
+ * 分享文章给好友（向好友发送消息通知）
+ * @param {number} id - 文章 ID
+ * @param {number} friendId - 好友用户 ID
+ * @returns {Promise<object>}
+ */
+export function shareArticle(id, friendId) {
+  return request(`/articles/${id}/share`, {
+    method: 'POST',
+    body: { friendId },
+  })
+}
+
+/**
+ * 获取当前用户已下架的文章列表
+ * @returns {Promise<object>} { list, total, page, pageSize }
+ */
+export function getDelistedPosts() {
+  return request('/user/posts?status=delisted')
+}
+
+/**
+ * 恢复已下架文章
+ * @param {number} id
+ * @returns {Promise<object>}
+ */
+export function restoreArticle(id) {
+  return request(`/articles/${id}/restore`, { method: 'PUT' })
+}

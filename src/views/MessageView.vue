@@ -1,445 +1,340 @@
 <!-- src/views/MessageView.vue -->
-<!-- 消息通知中心 — 展示评论/点赞/收藏/系统通知，点击跳转关联文章 -->
+<!-- 私聊列表 — 按联系人分组展示私信会话 + 顶部通知入口 -->
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getMessages, markAllAsRead, markAsRead, deleteMessage } from '../api/message.js'
+import { getChatMessages, getNotificationCount, markAllAsRead, markAsRead, deleteMessage } from '../api/message.js'
 
 const router = useRouter()
 
-// ==================== 消息数据 ====================
-const messages = ref([])       // 当前展示的消息列表
-const unreadCount = computed(() => messages.value.filter(m => m.unread).length)
+// ==================== 通知未读数 ====================
+const notiUnread = ref(0)
 
-// ==================== 类型筛选 ====================
-const filterType = ref('all')
+const fetchNotiCount = async () => {
+  try {
+    const res = await getNotificationCount()
+    notiUnread.value = res?.count || 0
+  } catch { /* 静默 */ }
+}
 
-const FILTER_OPTIONS = [
-  { key: 'all', label: '全部' },
-  { key: 'comment', label: '评论' },
-  { key: 'reply', label: '回复' },
-  { key: 'like', label: '点赞' },
-  { key: 'collect', label: '收藏' },
-  { key: 'system', label: '系统' },
-]
+// ==================== 私聊消息数据 ====================
+const chatMessages = ref([])
 
-const filteredMessages = computed(() => {
-  if (filterType.value === 'all') return messages.value
-  return messages.value.filter(m => m.type === filterType.value)
+// 按联系人分组后的会话列表
+const conversations = computed(() => {
+  const map = new Map()
+  chatMessages.value.forEach(msg => {
+    const key = msg.targetId || msg.sender
+    if (!map.has(key)) {
+      map.set(key, {
+        targetId: msg.targetId,
+        sender: msg.sender,
+        lastMessage: msg.content,
+        lastTime: msg.time,
+        lastDate: msg.date,
+        unreadCount: 0,
+        allIds: [],
+      })
+    }
+    const conv = map.get(key)
+    conv.allIds.push(msg.id)
+    if (msg.unread) conv.unreadCount++
+  })
+  // 按最新消息时间排序
+  return [...map.values()].sort((a, b) => new Date(b.lastDate) - new Date(a.lastDate))
 })
 
-// ==================== 管理模式（长按 → 批量删除） ====================
+// ==================== 管理模式 ====================
 const isManageMode = ref(false)
-const selectedIds = ref(new Set())
+const selectedKeys = ref(new Set())
 
-const enterManageMode = (preselectId = null) => {
+const enterManageMode = () => {
   isManageMode.value = true
-  selectedIds.value = new Set()
-  if (preselectId != null) {
-    selectedIds.value.add(preselectId)
-  }
-  // 退出左滑状态
-  swipedId.value = null
+  selectedKeys.value = new Set()
+  swipedKey.value = null
 }
 
 const exitManageMode = () => {
   isManageMode.value = false
-  selectedIds.value = new Set()
+  selectedKeys.value = new Set()
 }
 
-const toggleSelect = (id) => {
-  const next = new Set(selectedIds.value)
-  if (next.has(id)) {
-    next.delete(id)
-  } else {
-    next.add(id)
-  }
-  selectedIds.value = next
+const getConvKey = (c) => c.targetId || c.sender
+
+const toggleSelect = (conv) => {
+  const key = getConvKey(conv)
+  const next = new Set(selectedKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  selectedKeys.value = next
 }
 
 const toggleSelectAll = () => {
-  if (selectedIds.value.size === filteredMessages.value.length) {
-    selectedIds.value = new Set()
+  if (selectedKeys.value.size === conversations.value.length) {
+    selectedKeys.value = new Set()
   } else {
-    selectedIds.value = new Set(filteredMessages.value.map(m => m.id))
+    selectedKeys.value = new Set(conversations.value.map(c => getConvKey(c)))
   }
 }
 
-const isAllSelected = computed(() => {
-  return filteredMessages.value.length > 0 && selectedIds.value.size === filteredMessages.value.length
-})
+const isAllSelected = computed(() =>
+  conversations.value.length > 0 && selectedKeys.value.size === conversations.value.length
+)
+const selectedCount = computed(() => selectedKeys.value.size)
 
-const selectedCount = computed(() => selectedIds.value.size)
-
-// ==================== 长按检测 ====================
-const longPressTimer = ref(null)
-const longPressTarget = ref(null)
-const LONG_PRESS_DURATION = 500
-
-const startLongPress = (id, event) => {
-  if (isManageMode.value) return
-  longPressTarget.value = id
-  longPressTimer.value = setTimeout(() => {
-    if (longPressTarget.value === id) {
-      enterManageMode(id)
-    }
-    longPressTimer.value = null
-    longPressTarget.value = null
-  }, LONG_PRESS_DURATION)
-}
-
-const cancelLongPress = () => {
-  if (longPressTimer.value) {
-    clearTimeout(longPressTimer.value)
-    longPressTimer.value = null
-  }
-  longPressTarget.value = null
-}
-
-// ==================== 左滑删除检测 ====================
-const swipedId = ref(null)
+// ==================== 左滑删除 ====================
+const swipedKey = ref(null)
 const swipeStartX = ref(0)
 const swipeStartY = ref(0)
 const suppressNextClick = ref(false)
 
-const onCardTouchStart = (id, event) => {
-  // 启动长按检测
-  startLongPress(id, event)
-  // 记录滑动起始位置
+const onCardTouchStart = (conv, event) => {
   swipeStartX.value = event.touches[0].clientX
   swipeStartY.value = event.touches[0].clientY
 }
 
-const onCardTouchMove = (id, event) => {
-  // 任何移动都取消长按
-  cancelLongPress()
+const onCardTouchMove = (conv, event) => {
   if (isManageMode.value) return
-
   const deltaX = event.touches[0].clientX - swipeStartX.value
   const deltaY = event.touches[0].clientY - swipeStartY.value
-
-  // 仅响应水平滑动（水平位移 > 垂直位移 × 1.5）
   if (Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-    if (deltaX < -50) {
-      // 左滑：弹出删除按钮
-      swipedId.value = id
-      suppressNextClick.value = true
-    } else if (deltaX > 50) {
-      // 右滑：收回
-      swipedId.value = null
-    }
+    const key = getConvKey(conv)
+    if (deltaX < -50) { swipedKey.value = key; suppressNextClick.value = true }
+    else if (deltaX > 50) { swipedKey.value = null }
   }
 }
 
-const onCardTouchEnd = () => {
-  cancelLongPress()
-}
-
-const dismissSwipe = () => {
-  swipedId.value = null
-}
-
-// ==================== 类型配置 ====================
-const typeConfig = {
-  comment: { icon: '💬', color: 'var(--color-primary)', bg: 'var(--color-primary-light)', label: '评论' },
-  reply:   { icon: '↩️', color: 'var(--color-msg-reply)', bg: 'var(--color-msg-reply-bg)', label: '回复' },
-  like:    { icon: '❤️', color: 'var(--color-error)', bg: 'var(--color-error-bg)', label: '点赞' },
-  collect: { icon: '⭐', color: 'var(--color-warning)', bg: 'var(--color-warning-bg)', label: '收藏' },
-  system:  { icon: '📢', color: 'var(--color-msg-system)', bg: 'var(--color-msg-system-bg)', label: '系统' },
-}
-
-const getTypeMeta = (type) => typeConfig[type] || typeConfig.system
-
-// ==================== 消息分组 ====================
-const messageGroups = computed(() => {
-  const today = []
-  const yesterday = []
-  const earlier = []
-
-  const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const yesterdayStart = new Date(todayStart.getTime() - 86400000)
-
-  filteredMessages.value.forEach(msg => {
-    const d = new Date(msg.date)
-    if (d >= todayStart) {
-      today.push(msg)
-    } else if (d >= yesterdayStart) {
-      yesterday.push(msg)
-    } else {
-      earlier.push(msg)
-    }
-  })
-
-  const groups = []
-  if (today.length) groups.push({ label: '今天', items: today })
-  if (yesterday.length) groups.push({ label: '昨天', items: yesterday })
-  if (earlier.length) groups.push({ label: '更早', items: earlier })
-  return groups
-})
+const dismissSwipe = () => { swipedKey.value = null }
 
 // ==================== 数据加载 ====================
-const loadMessages = async () => {
+const loadChats = async () => {
   try {
-    const data = await getMessages()
-    // 兼容新旧返回格式：新格式 { list, total, page, pageSize, unreadCount }
+    const data = await getChatMessages({ pageSize: 200 })
     if (data && Array.isArray(data.list)) {
-      messages.value = data.list
+      chatMessages.value = data.list
     } else if (Array.isArray(data)) {
-      messages.value = data  // 旧格式兜底
+      chatMessages.value = data
     } else {
-      messages.value = []
+      chatMessages.value = []
     }
-  } catch (err) {
-    console.warn('消息加载失败:', err.message || err)
-    messages.value = []
+  } catch {
+    chatMessages.value = []
   }
 }
 
 // ==================== 操作 ====================
-const handleMessageClick = (msg) => {
-  // 滑动手势后的 click 忽略
-  if (suppressNextClick.value) {
-    suppressNextClick.value = false
-    return
+const handleConvClick = (conv) => {
+  if (suppressNextClick.value) { suppressNextClick.value = false; return }
+  const key = getConvKey(conv)
+  if (swipedKey.value !== null && swipedKey.value !== key) { dismissSwipe(); return }
+  if (swipedKey.value === key) { dismissSwipe(); return }
+  if (isManageMode.value) { toggleSelect(conv); return }
+  // 标记该会话所有未读消息为已读
+  const unreadIds = conv.allIds.filter((_id, i) => {
+    const msg = chatMessages.value.find(m => m.id === conv.allIds[i] || m.id === _id)
+    return msg && msg.unread
+  })
+  // Actually find the unread message IDs from the original messages
+  const unreadMsgIds = chatMessages.value
+    .filter(m => (m.targetId || m.sender) === key && m.unread)
+    .map(m => m.id)
+  if (unreadMsgIds.length > 0) {
+    chatMessages.value.forEach(m => {
+      if ((m.targetId || m.sender) === key) m.unread = false
+    })
+    markAsRead(unreadMsgIds).catch(() => {})
   }
-  // 任意卡片左滑展示中：点击其他卡片 → 收回
-  if (swipedId.value !== null && swipedId.value !== msg.id) {
-    dismissSwipe()
-    return
-  }
-  // 点击已左滑的卡片 → 收回
-  if (swipedId.value === msg.id) {
-    dismissSwipe()
-    return
-  }
-  // 管理模式下：切换选中
-  if (isManageMode.value) {
-    toggleSelect(msg.id)
-    return
-  }
-  // 标记为已读
-  if (msg.unread) {
-    msg.unread = false
-    markAsRead(msg.id).catch(() => {})
-  }
-  // 有关联文章则跳转
-  if (msg.targetId) {
-    router.push(`/article/${msg.targetId}`)
-  }
+  // 导航到用户详情页
+  if (conv.targetId) router.push(`/user/${conv.targetId}`)
 }
 
-/** 删除单条消息 — 乐观本地 + 异步 API */
-const handleDelete = async (msg) => {
-  const idx = messages.value.findIndex(m => m.id === msg.id)
-  if (idx >= 0) messages.value.splice(idx, 1)
-  try { await deleteMessage(msg.id) } catch { /* 静默降级 */ }
+/** 删除整个会话的所有消息 */
+const handleDeleteConv = async (conv) => {
+  const key = getConvKey(conv)
+  // 删除该会话所有消息
+  const idsToDelete = chatMessages.value
+    .filter(m => (m.targetId || m.sender) === key)
+    .map(m => m.id)
+  // 乐观移除
+  chatMessages.value = chatMessages.value.filter(m => !idsToDelete.includes(m.id))
+  // 异步删除
+  for (const id of idsToDelete) {
+    try { await deleteMessage(id) } catch { /* 静默 */ }
+  }
+  dismissSwipe()
 }
 
-/** 批量删除选中消息 */
+/** 批量删除选中的会话 */
 const deleteSelected = async () => {
-  if (selectedIds.value.size === 0) return
-  const idsToDelete = [...selectedIds.value]
-  // 乐观本地删除
-  for (const id of idsToDelete) {
-    const idx = messages.value.findIndex(m => m.id === id)
-    if (idx >= 0) messages.value.splice(idx, 1)
-  }
-  // 异步 API
-  for (const id of idsToDelete) {
-    try { await deleteMessage(id) } catch { /* 静默降级 */ }
+  if (selectedKeys.value.size === 0) return
+  const keysToDelete = [...selectedKeys.value]
+  for (const key of keysToDelete) {
+    const idsToDelete = chatMessages.value
+      .filter(m => (m.targetId || m.sender) === key)
+      .map(m => m.id)
+    chatMessages.value = chatMessages.value.filter(m => !idsToDelete.includes(m.id))
+    for (const id of idsToDelete) {
+      try { await deleteMessage(id) } catch { /* 静默 */ }
+    }
   }
   exitManageMode()
 }
 
-const handleMarkAllRead = async () => {
-  // 乐观更新：立即标记全部已读
-  messages.value.forEach(m => { m.unread = false })
-
-  // 异步同步到服务端
-  try {
-    await markAllAsRead()
-  } catch (err) {
-    if (err.status !== 0) {
-      console.warn('标记已读同步失败:', err.message || err)
-    }
-  }
+// ==================== 通知入口点击 ====================
+const goToNotifications = () => {
+  router.push('/notifications')
 }
 
-onMounted(() => { loadMessages() })
+// ==================== 生命周期 ====================
+onMounted(() => {
+  loadChats()
+  fetchNotiCount()
+})
+
+// 每次页面可见时刷新通知未读数
+let visibilityHandler = null
+onMounted(() => {
+  visibilityHandler = () => {
+    if (document.visibilityState === 'visible') fetchNotiCount()
+  }
+  document.addEventListener('visibilitychange', visibilityHandler)
+})
 
 onUnmounted(() => {
-  cancelLongPress()
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler)
 })
 </script>
 
 <template>
-  <main class="message-page" aria-label="消息通知">
+  <main class="chat-page" aria-label="私聊">
 
     <!-- ==================== 顶部导航 ==================== -->
     <header class="page-header">
       <template v-if="isManageMode">
-        <span class="cancel-btn" role="button" tabindex="0" aria-label="取消管理" @click="exitManageMode" @keydown.enter.prevent="exitManageMode" @keydown.space.prevent="exitManageMode">✕ 取消</span>
+        <span class="cancel-btn" role="button" tabindex="0" @click="exitManageMode" @keydown.enter.prevent="exitManageMode" @keydown.space.prevent="exitManageMode">✕ 取消</span>
         <span class="title">已选 {{ selectedCount }} 项</span>
-        <button
-          class="batch-delete-btn"
-          :disabled="selectedCount === 0"
-          @click="deleteSelected"
-        >
+        <button class="batch-delete-btn" :disabled="selectedCount === 0" @click="deleteSelected">
           删除{{ selectedCount > 0 ? `(${selectedCount})` : '' }}
         </button>
       </template>
       <template v-else>
-        <div class="header-left">
-          <h1 class="header-title">消息中心</h1>
-          <span v-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
-        </div>
-        <div class="header-right">
-          <button
-            v-if="unreadCount > 0"
-            class="mark-all-btn"
-            @click="handleMarkAllRead"
-          >
-            全部已读
-          </button>
-          <span
-            v-if="messages.length > 0"
-            class="manage-btn"
-            role="button"
-            tabindex="0"
-            @click="enterManageMode()"
-            @keydown.enter.prevent="enterManageMode()"
-            @keydown.space.prevent="enterManageMode()"
-          >管理</span>
-        </div>
+        <h1 class="header-title">消息</h1>
+        <span
+          v-if="conversations.length > 0"
+          class="manage-btn"
+          role="button"
+          tabindex="0"
+          @click="enterManageMode()"
+          @keydown.enter.prevent="enterManageMode()"
+          @keydown.space.prevent="enterManageMode()"
+        >管理</span>
       </template>
     </header>
 
-    <!-- ==================== 空状态 ==================== -->
-    <div v-if="messages.length === 0" class="empty-state">
-      <span class="empty-icon">🔔</span>
-      <p class="empty-text">暂无消息通知</p>
-      <p class="empty-hint">当有人评论、点赞或收藏你的文章时，你会在这里收到通知</p>
+    <!-- ==================== 通知入口卡片 ==================== -->
+    <div
+      class="noti-entry"
+      role="button"
+      tabindex="0"
+      aria-label="查看通知"
+      @click="goToNotifications"
+      @keydown.enter.prevent="goToNotifications"
+      @keydown.space.prevent="goToNotifications"
+    >
+      <div class="noti-entry-left">
+        <div class="noti-icon-box">
+          <span class="noti-icon">🔔</span>
+        </div>
+        <div class="noti-info">
+          <span class="noti-label">通知</span>
+          <span class="noti-sub">评论、点赞等互动消息</span>
+        </div>
+      </div>
+      <div class="noti-entry-right">
+        <span v-if="notiUnread > 0" class="noti-badge">{{ notiUnread > 99 ? '99+' : notiUnread }}</span>
+        <span class="noti-arrow">›</span>
+      </div>
     </div>
 
     <!-- ==================== 管理模式全选工具栏 ==================== -->
-    <div v-if="isManageMode && messages.length > 0" class="manage-toolbar">
-      <label class="select-all-label" @click="toggleSelectAll" @keydown.enter.prevent="toggleSelectAll" @keydown.space.prevent="toggleSelectAll">
-        <span
-          class="checkbox-box"
-          :class="{ checked: isAllSelected, indeterminate: selectedCount > 0 && !isAllSelected }"
-          role="checkbox"
-          :aria-checked="isAllSelected ? 'true' : selectedCount > 0 ? 'mixed' : 'false'"
-          tabindex="0"
-        ></span>
-        <span class="select-all-text">
-          {{ isAllSelected ? '取消全选' : '全选' }}
-        </span>
+    <div v-if="isManageMode && conversations.length > 0" class="manage-toolbar">
+      <label class="select-all-label" @click="toggleSelectAll">
+        <span class="checkbox-box" :class="{ checked: isAllSelected, indeterminate: selectedCount > 0 && !isAllSelected }" role="checkbox" :aria-checked="isAllSelected ? 'true' : selectedCount > 0 ? 'mixed' : 'false'" tabindex="0"></span>
+        <span class="select-all-text">{{ isAllSelected ? '取消全选' : '全选' }}</span>
       </label>
     </div>
 
-    <!-- ==================== 类型筛选标签 ==================== -->
-    <div v-if="messages.length > 0" class="filter-tabs" role="tablist" aria-label="消息类型筛选">
-      <span
-        v-for="opt in FILTER_OPTIONS"
-        :key="opt.key"
-        class="filter-item"
-        :class="{ active: filterType === opt.key }"
-        role="tab"
-        :aria-selected="filterType === opt.key ? 'true' : 'false'"
-        tabindex="0"
-        @click="filterType = opt.key"
-        @keydown.enter.prevent="filterType = opt.key"
-        @keydown.space.prevent="filterType = opt.key"
-      >
-        {{ opt.label }}
-      </span>
+    <!-- ==================== 空状态 ==================== -->
+    <div v-if="conversations.length === 0" class="empty-state">
+      <span class="empty-icon">💬</span>
+      <p class="empty-text">暂无私聊</p>
+      <p class="empty-hint">当有人向你发送私信时，会话将显示在这里</p>
     </div>
 
-    <!-- ==================== 消息列表（按时间分组） ==================== -->
-    <div v-if="messages.length > 0" class="message-body">
-      <div v-for="group in messageGroups" :key="group.label" class="message-group">
-        <!-- 分组标签 -->
-        <div class="group-label">{{ group.label }}</div>
+    <!-- ==================== 私聊会话列表 ==================== -->
+    <div v-else class="conv-list">
+      <div
+        v-for="conv in conversations"
+        :key="getConvKey(conv)"
+        class="conv-card-wrapper"
+        :class="{ swiped: swipedKey === getConvKey(conv) }"
+      >
+        <!-- 左滑删除按钮 -->
+        <span
+          v-if="!isManageMode"
+          class="swipe-delete-btn"
+          role="button"
+          tabindex="0"
+          aria-label="删除会话"
+          @click.stop="handleDeleteConv(conv)"
+          @keydown.enter.prevent.stop="handleDeleteConv(conv)"
+          @keydown.space.prevent.stop="handleDeleteConv(conv)"
+        >删除</span>
 
-        <!-- 消息卡片 -->
-        <div class="group-cards">
-          <div
-            v-for="msg in group.items"
-            :key="msg.id"
-            class="message-card-wrapper"
-            :class="{ swiped: swipedId === msg.id }"
+        <!-- 会话卡片 -->
+        <div
+          class="conv-card"
+          :class="{
+            'manage-mode': isManageMode,
+            'selected': isManageMode && selectedKeys.has(getConvKey(conv)),
+            'swiped': swipedKey === getConvKey(conv),
+            'has-unread': conv.unreadCount > 0,
+          }"
+          role="button"
+          tabindex="0"
+          @click="handleConvClick(conv)"
+          @keydown.enter.prevent="handleConvClick(conv)"
+          @keydown.space.prevent="handleConvClick(conv)"
+          @touchstart.passive="onCardTouchStart(conv, $event)"
+          @touchmove="onCardTouchMove(conv, $event)"
+        >
+          <!-- 管理模式勾选框 -->
+          <span
+            v-if="isManageMode"
+            class="select-checkbox"
+            :class="{ checked: selectedKeys.has(getConvKey(conv)) }"
+            role="checkbox"
+            :aria-checked="selectedKeys.has(getConvKey(conv)) ? 'true' : 'false'"
+            tabindex="0"
+            @click.stop="toggleSelect(conv)"
+            @keydown.enter.prevent.stop="toggleSelect(conv)"
+            @keydown.space.prevent.stop="toggleSelect(conv)"
           >
-            <!-- 左滑露出的删除按钮 -->
-            <span
-              v-if="!isManageMode"
-              class="swipe-delete-btn"
-              role="button"
-              tabindex="0"
-              aria-label="删除消息"
-              @click.stop="handleDelete(msg)"
-              @keydown.enter.prevent.stop="handleDelete(msg)"
-              @keydown.space.prevent.stop="handleDelete(msg)"
-            >删除</span>
+            <span v-if="selectedKeys.has(getConvKey(conv))" class="check-icon">✓</span>
+          </span>
 
-            <!-- 卡片本体 -->
-            <div
-              class="message-card"
-              :class="{
-                'is-unread': msg.unread,
-                'manage-mode': isManageMode,
-                'selected': isManageMode && selectedIds.has(msg.id),
-                'swiped': swipedId === msg.id,
-              }"
-              role="button"
-              tabindex="0"
-              @click="handleMessageClick(msg)"
-              @keydown.enter.prevent="handleMessageClick(msg)"
-              @keydown.space.prevent="handleMessageClick(msg)"
-              @touchstart.passive="onCardTouchStart(msg.id, $event)"
-              @touchend="onCardTouchEnd"
-              @touchmove="onCardTouchMove(msg.id, $event)"
-              @mousedown="startLongPress(msg.id, $event)"
-              @mouseup="cancelLongPress"
-              @mouseleave="cancelLongPress"
-            >
-              <!-- 管理模式勾选框 -->
-              <span
-                v-if="isManageMode"
-                class="select-checkbox"
-                :class="{ checked: selectedIds.has(msg.id) }"
-                role="checkbox"
-                :aria-checked="selectedIds.has(msg.id) ? 'true' : 'false'"
-                tabindex="0"
-                @click.stop="toggleSelect(msg.id)"
-                @keydown.enter.prevent.stop="toggleSelect(msg.id)"
-                @keydown.space.prevent.stop="toggleSelect(msg.id)"
-              >
-                <span v-if="selectedIds.has(msg.id)" class="check-icon">✓</span>
-              </span>
+          <!-- 头像 -->
+          <div class="conv-avatar">{{ conv.sender[0] }}</div>
 
-              <!-- 左侧类型图标 -->
-              <div
-                class="card-avatar"
-                :style="{ background: getTypeMeta(msg.type).bg, color: getTypeMeta(msg.type).color }"
-              >
-                {{ getTypeMeta(msg.type).icon }}
-              </div>
-
-              <!-- 中间内容 -->
-              <div class="card-body">
-                <div class="card-title-row">
-                  <span class="sender-name">{{ msg.sender }}</span>
-                  <span v-if="msg.action" class="action-text">{{ msg.action }}</span>
-                </div>
-                <p class="card-content">{{ msg.content }}</p>
-              </div>
-
-              <!-- 右侧时间 + 未读标记 -->
-              <div class="card-meta">
-                <span class="time-text">{{ msg.time }}</span>
-                <span v-if="msg.unread" class="unread-dot"></span>
-              </div>
+          <!-- 中间内容 -->
+          <div class="conv-body">
+            <div class="conv-top-row">
+              <span class="conv-name">{{ conv.sender }}</span>
+              <span class="conv-time">{{ conv.lastTime }}</span>
+            </div>
+            <div class="conv-bottom-row">
+              <p class="conv-preview">{{ conv.lastMessage }}</p>
+              <span v-if="conv.unreadCount > 0" class="conv-unread-badge">{{ conv.unreadCount > 99 ? '99+' : conv.unreadCount }}</span>
             </div>
           </div>
         </div>
@@ -451,7 +346,7 @@ onUnmounted(() => {
 
 <style scoped>
 /* ==================== 整体 ==================== */
-.message-page {
+.chat-page {
   min-height: 100vh;
   background: var(--color-bg-page);
   padding-bottom: 20px;
@@ -462,51 +357,87 @@ onUnmounted(() => {
   background: var(--color-bg-card);
   padding: 15px 16px;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   border-bottom: 1px solid var(--color-divider);
   position: sticky;
   top: 0;
   z-index: 10;
 }
-.header-left {
+.header-title { font-size: 18px; font-weight: 600; color: var(--color-text-primary); margin: 0; }
+.manage-btn {
+  position: absolute;
+  right: 16px;
+  font-size: 14px; color: var(--color-primary); font-weight: 500;
+  cursor: pointer; padding: 4px 8px; border-radius: 4px; transition: background 0.15s;
+}
+.manage-btn:active { background: var(--color-primary-light); }
+
+/* 管理模式 Header */
+.cancel-btn { font-size: 15px; color: var(--color-primary); font-weight: 500; cursor: pointer; }
+.title { font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
+.batch-delete-btn {
+  font-size: 14px; font-weight: 500;
+  color: var(--color-error);
+  background: none;
+  border: 1px solid var(--color-error);
+  border-radius: 6px;
+  padding: 5px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.batch-delete-btn:active:not(:disabled) { background: var(--color-error-bg); transform: scale(0.96); }
+.batch-delete-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ==================== 通知入口卡片 ==================== */
+.noti-entry {
+  margin: 12px 16px 0;
+  padding: 14px 16px;
+  background: var(--color-primary);
+  border-radius: 12px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  width: calc(100% - 32px);
+  box-sizing: border-box;
 }
-.header-title {
+.noti-entry:active { opacity: 0.85; }
+.noti-entry-left { display: flex; align-items: center; gap: 12px; }
+.noti-icon-box {
+  width: 40px; height: 40px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 18px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin: 0;
+  flex-shrink: 0;
 }
-.unread-badge {
+.noti-info { display: flex; flex-direction: column; gap: 2px; }
+.noti-label { font-size: 16px; font-weight: 600; color: #fff; }
+.noti-sub { font-size: 12px; color: rgba(255,255,255,0.75); }
+.noti-entry-right { display: flex; align-items: center; gap: 8px; }
+.noti-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  background: var(--color-error);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 10px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  background: #fff;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 11px;
   line-height: 1;
 }
-.mark-all-btn {
-  font-size: 13px;
-  color: var(--color-primary);
-  background: none;
-  border: none;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background 0.15s;
-  font-family: inherit;
-}
-.mark-all-btn:active { background: var(--color-primary-light); }
+.noti-arrow { font-size: 22px; color: rgba(255,255,255,0.7); font-weight: 300; }
 
 /* ==================== 空状态 ==================== */
 .empty-state {
@@ -520,48 +451,56 @@ onUnmounted(() => {
 .empty-text { font-size: 16px; font-weight: 600; color: var(--color-text-body); margin: 0 0 6px 0; }
 .empty-hint { font-size: 14px; color: var(--color-text-tertiary); margin: 0; max-width: 260px; line-height: 1.6; }
 
-/* ==================== 消息分组 ==================== */
-.message-body {
+/* ==================== 全选工具栏 ==================== */
+.manage-toolbar {
+  display: flex; align-items: center; padding: 10px 16px;
+  background: var(--color-bg-card); border-bottom: 1px solid var(--color-divider);
+  max-width: 720px; margin-left: auto; margin-right: auto; width: 100%; box-sizing: border-box;
+}
+.select-all-label { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.checkbox-box {
+  width: 20px; height: 20px; border-radius: 4px;
+  border: 2px solid var(--color-border);
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; flex-shrink: 0;
+}
+.checkbox-box.checked { background: var(--color-primary); border-color: var(--color-primary); }
+.checkbox-box.checked::after { content: '✓'; color: #fff; font-size: 12px; font-weight: 700; }
+.checkbox-box.indeterminate { background: var(--color-primary); border-color: var(--color-primary); }
+.checkbox-box.indeterminate::after { content: '−'; color: #fff; font-size: 14px; font-weight: 700; line-height: 1; }
+.select-all-text { font-size: 14px; color: var(--color-text-secondary); }
+
+/* ==================== 会话列表 ==================== */
+.conv-list {
+  margin-top: 12px;
   padding: 0 16px;
   max-width: 720px;
   margin-left: auto;
   margin-right: auto;
   width: 100%;
   box-sizing: border-box;
-}
-.message-group {
-  margin-top: 20px;
-}
-.group-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-tertiary);
-  margin-bottom: 8px;
-  padding-left: 2px;
-}
-.group-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   background: var(--color-bg-card);
   border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
   overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
 }
 
-/* ==================== 消息卡片外层（左滑容器） ==================== */
-.message-card-wrapper {
+/* ==================== 会话卡片外层（左滑容器） ==================== */
+.conv-card-wrapper {
   position: relative;
   overflow: hidden;
   background: var(--color-bg-card);
 }
-.message-card-wrapper + .message-card-wrapper {
+.conv-card-wrapper + .conv-card-wrapper {
   border-top: 1px solid var(--color-bg-page);
 }
 
-/* 左滑露出的删除按钮 — 默认透明，仅左滑时可见 */
 .swipe-delete-btn {
   position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
+  right: 0; top: 0; bottom: 0;
   width: 70px;
   background: var(--color-error);
   color: #fff;
@@ -577,18 +516,16 @@ onUnmounted(() => {
   pointer-events: none;
   transition: opacity 0.2s;
 }
-.message-card-wrapper.swiped .swipe-delete-btn {
+.conv-card-wrapper.swiped .swipe-delete-btn {
   opacity: 1;
   pointer-events: auto;
 }
-.swipe-delete-btn:active {
-  opacity: 0.85;
-}
+.swipe-delete-btn:active { opacity: 0.85; }
 
-/* ==================== 消息卡片 ==================== */
-.message-card {
+/* ==================== 会话卡片 ==================== */
+.conv-card {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   padding: 14px 16px;
   gap: 12px;
   cursor: pointer;
@@ -597,18 +534,14 @@ onUnmounted(() => {
   z-index: 1;
   background: var(--color-bg-card);
 }
-.message-card:active { background: var(--color-bg-page); }
+.conv-card:active { background: var(--color-bg-page); }
+.conv-card.swiped { transform: translateX(-70px); }
 
-/* 左滑状态 */
-.message-card.swiped {
-  transform: translateX(-70px);
-}
-
-/* 未读消息：左侧蓝色竖线 + 浅蓝背景 */
-.message-card.is-unread {
+/* 未读会话左侧蓝色竖线 */
+.conv-card.has-unread {
   background: var(--color-primary-light);
 }
-.message-card.is-unread::before {
+.conv-card.has-unread::before {
   content: '';
   position: absolute;
   left: 0;
@@ -619,242 +552,72 @@ onUnmounted(() => {
   border-radius: 0 2px 2px 0;
 }
 
-/* --- 左侧图标 --- */
-.card-avatar {
-  width: 40px;
-  height: 40px;
+/* 头像 */
+.conv-avatar {
+  width: 48px; height: 48px;
   border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary), #6366f1);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
   flex-shrink: 0;
-  line-height: 1;
 }
 
-/* --- 中间内容 --- */
-.card-body {
+/* 中间内容 */
+.conv-body { flex: 1; min-width: 0; }
+.conv-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.conv-name { font-size: 15px; font-weight: 600; color: var(--color-text-primary); }
+.conv-time { font-size: 12px; color: var(--color-text-tertiary); white-space: nowrap; flex-shrink: 0; }
+.conv-bottom-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.conv-preview {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
 }
-.card-title-row {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  margin-bottom: 4px;
-  flex-wrap: wrap;
-}
-.sender-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-.action-text {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  font-weight: 400;
-}
-.card-content {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  line-height: 1.5;
-  margin: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-/* --- 右侧时间 --- */
-.card-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  flex-shrink: 0;
-  margin-left: 4px;
-}
-.time-text {
-  font-size: 11px;
-  color: var(--color-text-tertiary);
-  white-space: nowrap;
-}
-.unread-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--color-primary);
-  border-radius: 50%;
-}
-
-/* ==================== 类型筛选标签 ==================== */
-.filter-tabs {
-  display: flex;
-  gap: 8px;
-  margin: 0 16px;
-  padding: 12px 0;
-  overflow-x: auto;
-  white-space: nowrap;
-  -webkit-overflow-scrolling: touch;
-  max-width: 720px;
-  margin-left: auto;
-  margin-right: auto;
-  width: 100%;
-  box-sizing: border-box;
-}
-.filter-tabs::-webkit-scrollbar { display: none; }
-.filter-item {
-  padding: 5px 14px;
-  border-radius: 16px;
-  font-size: 13px;
-  background: var(--color-bg-card);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  flex-shrink: 0;
-  user-select: none;
-  border: 1px solid var(--color-border);
-  transition: all 0.2s;
-}
-.filter-item:active { transform: scale(0.95); }
-.filter-item.active {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
-  font-weight: 500;
-}
-
-/* ==================== 管理模式 ==================== */
-
-/* Header */
-.cancel-btn {
-  font-size: 15px;
-  color: var(--color-primary);
-  font-weight: 500;
-  cursor: pointer;
-}
-.title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.manage-btn {
-  font-size: 14px;
-  color: var(--color-primary);
-  font-weight: 500;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background 0.15s;
-}
-.manage-btn:active {
-  background: var(--color-primary-light);
-}
-
-/* Header 批量删除按钮 */
-.batch-delete-btn {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-error);
-  background: none;
-  border: 1px solid var(--color-error);
-  border-radius: 6px;
-  padding: 5px 14px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.2s;
-}
-.batch-delete-btn:active:not(:disabled) {
-  background: var(--color-error-bg);
-  transform: scale(0.96);
-}
-.batch-delete-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-/* 全选工具栏 */
-.manage-toolbar {
-  display: flex;
-  align-items: center;
-  padding: 10px 16px;
-  background: var(--color-bg-card);
-  border-bottom: 1px solid var(--color-divider);
-  max-width: 720px;
-  margin-left: auto;
-  margin-right: auto;
-  width: 100%;
-  box-sizing: border-box;
-}
-.select-all-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  user-select: none;
-}
-.checkbox-box {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  border: 2px solid var(--color-border);
-  display: flex;
+.conv-unread-badge {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  line-height: 1;
   flex-shrink: 0;
 }
-.checkbox-box.checked {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-}
-.checkbox-box.checked::after {
-  content: '✓';
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-}
-.checkbox-box.indeterminate {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-}
-.checkbox-box.indeterminate::after {
-  content: '−';
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
-}
-.select-all-text {
-  font-size: 14px;
-  color: var(--color-text-secondary);
-}
 
-/* 管理模式卡片 */
-.message-card.manage-mode {
-  padding-left: 44px;
-  cursor: pointer;
-}
-.message-card.manage-mode:active {
-  background: var(--color-bg-page);
-}
-.message-card.selected {
-  border-color: var(--color-primary);
-  background: var(--color-primary-light);
-}
-
-/* 圆形勾选框 */
+/* ==================== 管理模式卡片 ==================== */
+.conv-card.manage-mode { padding-left: 44px; cursor: pointer; }
+.conv-card.manage-mode:active { background: var(--color-bg-page); }
+.conv-card.selected { background: var(--color-primary-light); }
 .select-checkbox {
   position: absolute;
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  width: 22px;
-  height: 22px;
+  width: 22px; height: 22px;
   border-radius: 50%;
   border: 2px solid var(--color-border);
   display: flex;
@@ -863,14 +626,6 @@ onUnmounted(() => {
   transition: all 0.2s;
   flex-shrink: 0;
 }
-.select-checkbox.checked {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-}
-.check-icon {
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-}
+.select-checkbox.checked { background: var(--color-primary); border-color: var(--color-primary); }
+.check-icon { color: #fff; font-size: 12px; font-weight: 700; line-height: 1; }
 </style>

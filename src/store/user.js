@@ -27,7 +27,8 @@ const DEFAULTS = {
   role: '一线工程师',
   desc: '专注于西门子 PLC 与变频器调试，乐于分享工业自动化经验。',
   token: '',
-  isLoggedIn: true,
+  refreshToken: '',
+  isLoggedIn: false,
   collectIds: [],
   historyIds: [],
 }
@@ -52,6 +53,7 @@ export const userStore = reactive({
   role: persisted.role,
   desc: persisted.desc,
   token: persisted.token,
+  refreshToken: persisted.refreshToken,
   isLoggedIn: persisted.isLoggedIn,
   collectIds: persisted.collectIds,
   historyIds: persisted.historyIds,
@@ -67,6 +69,7 @@ function persistUser() {
     role: userStore.role,
     desc: userStore.desc,
     token: userStore.token,
+    refreshToken: userStore.refreshToken,
     isLoggedIn: userStore.isLoggedIn,
     collectIds: [...userStore.collectIds],
     historyIds: [...userStore.historyIds],
@@ -131,14 +134,21 @@ export async function restoreSession() {
   // 真实 token：尝试刷新
   try {
     const result = await refreshToken()
+    // 如果在等待期间已通过 setLoginState 手动登录，丢弃刷新结果
+    if (_sessionReady) return true
     if (result?.token) {
       userStore.token = result.token
+      if (result.name) userStore.name = result.name
+      if (result.role) userStore.role = result.role
+      if (result.account) userStore.account = result.account
       userStore.isLoggedIn = true
       _sessionReady = true
       persistUser()
       return true
     }
   } catch (err) {
+    // 如果在等待期间已手动登录，忽略刷新失败
+    if (_sessionReady) return true
     // token 过期或网络不可用
     console.warn('会话恢复失败:', err.message || err)
   }
@@ -154,20 +164,23 @@ export async function restoreSession() {
 // ==================== 登录状态 ====================
 /**
  * 登录成功后设置用户状态
- * @param {{ name: string, token: string, role: string }} loginData
+ * @param {{ name: string, token: string, role: string, account: string }} loginData
  */
-export function setLoginState({ name, token, role }) {
+export function setLoginState({ name, token, refreshToken, role, account }) {
   _sessionReady = true
   userStore.name = name
   userStore.role = role || '一线工程师'
   userStore.token = token
+  userStore.refreshToken = refreshToken || ''
   userStore.isLoggedIn = true
+  if (account) userStore.account = account
   persistUser()
 }
 
 /** 登出 — 清除登录状态，同时通知后端销毁 refresh token */
 export async function clearLoginState() {
   userStore.token = ''
+  userStore.refreshToken = ''
   userStore.isLoggedIn = false
   persistUser()
   // 通知后端登出（销毁 refresh token），失败不阻塞

@@ -1,20 +1,16 @@
 // src/api/client.js
 // fetch 封装层 — 统一 base URL、JSON 序列化、错误处理、自动附带 token
+import { load } from '../utils/storage.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 /**
  * 从 localStorage 读取 token（避免循环依赖 userStore）
+ * 注意：必须与 user.js 中的 STORAGE_KEY 一致，且通过 storage.js 的 load() 读取（带 ic_ 前缀）
  */
 function getToken() {
-  try {
-    const raw = localStorage.getItem('user')
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      return parsed.token || ''
-    }
-  } catch { /* ignore */ }
-  return ''
+  const stored = load('user', {})
+  return stored.token || ''
 }
 
 /**
@@ -37,10 +33,10 @@ export async function request(path, options = {}) {
     config.headers['Authorization'] = `Bearer ${token}`
   }
 
-  // JSON 请求：自动设置 Content-Type 并序列化 body
-  if (!(config.body instanceof FormData)) {
+  // JSON 请求：仅在有 body 时设置 Content-Type 并序列化
+  if (config.body != null && !(config.body instanceof FormData)) {
     config.headers['Content-Type'] = 'application/json'
-    if (config.body && typeof config.body === 'object') {
+    if (typeof config.body === 'object') {
       config.body = JSON.stringify(config.body)
     }
   }

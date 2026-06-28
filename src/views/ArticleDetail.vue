@@ -1,16 +1,19 @@
 <!-- src/views/ArticleDetail.vue -->
 <!-- 文章详情页 — 含评论互动系统 -->
 <script setup>
-import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getArticle, incrementView, likeArticle } from '../api/article.js'
+import { getArticle, incrementView, likeArticle, deleteArticle, shareArticle as apiShareArticle } from '../api/article.js'
 import { getComments, postComment, toggleLikeComment } from '../api/comment.js'
 import { searchArticles } from '../api/search.js'
-import { toggleCollect as toggleCollectStore, isCollected, addHistory } from '../store/user.js'
+import { toggleCollect as toggleCollectStore, isCollected, addHistory, currentIsAdmin } from '../store/user.js'
+import { friendStore, initFriendData } from '../store/friends.js'
+import { request } from '../api/client.js'
 
 const router = useRouter()
 const route = useRoute()
 const articleId = computed(() => Number(route.params.id))
+const fromUserDetail = computed(() => route.query.from === 'userDetail')
 
 // ==================== 文章数据 ====================
 const articleData = ref(null)
@@ -94,24 +97,59 @@ const loadRelatedArticles = async () => {
 }
 
 // ==================== 分享 ====================
-const shareArticle = async () => {
+const showShareSheet = ref(false)
+const showFriendPicker = ref(false)
+const shareFriendsLoading = ref(false)
+const shareSendingIds = ref(new Set())
+const shareError = ref('')
+
+const openShareSheet = () => {
+  showShareSheet.value = true
+}
+
+const closeShareSheet = () => {
+  showShareSheet.value = false
+  showFriendPicker.value = false
+}
+
+const copyLink = async () => {
   const url = window.location.href
-  const title = articleData.value?.title || '分享文章'
-
-  // 优先使用 Web Share API
-  if (navigator.share) {
-    try {
-      await navigator.share({ title, url })
-      return
-    } catch { /* 用户取消 */ }
-  }
-
-  // 降级：复制链接
   try {
     await navigator.clipboard.writeText(url)
     showToast('链接已复制到剪贴板')
   } catch {
     showToast(url)
+  }
+  closeShareSheet()
+}
+
+const openFriendPicker = async () => {
+  showFriendPicker.value = true
+  shareFriendsLoading.value = true
+  shareError.value = ''
+  shareSendingIds.value = new Set()
+
+  await initFriendData()
+
+  if (friendStore.list.length === 0) {
+    shareError.value = '暂无好友，请先添加好友'
+  }
+  shareFriendsLoading.value = false
+}
+
+const sendToFriend = async (friend) => {
+  if (shareSendingIds.value.has(friend.id)) return
+
+  shareSendingIds.value = new Set([...shareSendingIds.value, friend.id])
+  try {
+    await apiShareArticle(articleId.value, friend.id)
+    showToast(`已分享给 ${friend.name}`)
+  } catch {
+    showToast('分享失败，请重试')
+  } finally {
+    const next = new Set(shareSendingIds.value)
+    next.delete(friend.id)
+    shareSendingIds.value = next
   }
 }
 
@@ -251,8 +289,78 @@ const scrollToComments = () => {
 // ==================== 导航 ====================
 const goBack = () => { router.back() }
 
+const goToAuthor = () => {
+  const data = articleData.value
+  if (!data) return
+  // 优先使用作者 ID 跳转到用户详情页
+  if (data.authorId) {
+    router.push(`/user/${data.authorId}`)
+  } else {
+    // 降级：通过作者名字搜索
+    router.push(`/search?q=${encodeURIComponent(data.author)}`)
+  }
+}
+
+/** 点击评论用户头像/名称 → 跳转到该用户详情页 */
+const goToCommentAuthor = async (authorName) => {
+  if (!authorName) return
+  try {
+    const result = await request(`/user/search?q=${encodeURIComponent(authorName)}`)
+    const list = result?.list || result || []
+    const match = Array.isArray(list) ? list.find(u => u.name === authorName || u.account === authorName) : null
+    if (match?.id) {
+      router.push(`/user/${match.id}`)
+    } else {
+      router.push(`/search?q=${encodeURIComponent(authorName)}`)
+    }
+  } catch {
+    router.push(`/search?q=${encodeURIComponent(authorName)}`)
+  }
+}
+
+// ==================== 管理员菜单（三点按钮） ====================
+const isAdmin = computed(() => currentIsAdmin())
+const showAdminMenu = ref(false)
+const menuRef = ref(null)
+const deleting = ref(false)
+
+const toggleAdminMenu = () => {
+  showAdminMenu.value = !showAdminMenu.value
+}
+
+const handleAdminEdit = () => {
+  showAdminMenu.value = false
+  router.push(`/publish?edit=${articleId.value}`)
+}
+
+const handleAdminDelete = async () => {
+  showAdminMenu.value = false
+  const ok = window.confirm('确定要下架这篇文章吗？下架后作者可在"已下架文章"中恢复。')
+  if (!ok) return
+  deleting.value = true
+  try {
+    await deleteArticle(articleId.value)
+    router.back()
+  } catch (err) {
+    showToast(err.message || '下架失败，请重试')
+  } finally {
+    deleting.value = false
+  }
+}
+
+const closeAdminMenu = (e) => {
+  if (menuRef.value && !menuRef.value.contains(e.target)) {
+    showAdminMenu.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', closeAdminMenu)
+})
+
 onUnmounted(() => {
   clearTimeout(toastTimer.value)
+  document.removeEventListener('click', closeAdminMenu)
 })
 </script>
 
@@ -266,7 +374,31 @@ onUnmounted(() => {
         <span class="back-text">返回</span>
       </div>
       <span class="header-title">文章详情</span>
-      <div class="header-right"></div>
+      <div class="header-right">
+        <div v-if="isAdmin" ref="menuRef" class="admin-menu-wrapper">
+          <button
+            class="admin-menu-btn"
+            :class="{ open: showAdminMenu }"
+            aria-label="更多操作"
+            :disabled="deleting"
+            @click.stop="toggleAdminMenu"
+          >
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </button>
+          <div v-if="showAdminMenu" class="admin-dropdown">
+            <button class="dropdown-item" @click="handleAdminEdit">
+              <span class="dropdown-icon">✏️</span>
+              <span>修改文章</span>
+            </button>
+            <button class="dropdown-item dropdown-item--danger" :disabled="deleting" @click="handleAdminDelete">
+              <span class="dropdown-icon">🗑️</span>
+              <span>{{ deleting ? '下架中...' : '下架文章' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </header>
 
     <!-- ==================== 文章未找到 ==================== -->
@@ -285,13 +417,31 @@ onUnmounted(() => {
 
         <!-- 设备标签 -->
         <div class="device-tag">{{ articleData.type }}</div>
+
+        <!-- ==================== 作者信息卡片（紧贴标题上方） ==================== -->
+        <div
+          class="author-card"
+          :class="{ clickable: !fromUserDetail }"
+          :role="fromUserDetail ? undefined : 'button'"
+          :tabindex="fromUserDetail ? undefined : 0"
+          @click="!fromUserDetail && goToAuthor()"
+          @keydown.enter.prevent="!fromUserDetail && goToAuthor()"
+          @keydown.space.prevent="!fromUserDetail && goToAuthor()"
+        >
+          <div class="author-avatar">{{ (articleData.author || '?')[0] }}</div>
+          <div class="author-info">
+            <div class="author-name-row">
+              <span class="author-name">{{ articleData.author }}</span>
+              <span v-if="articleData.department" class="author-dept">{{ articleData.department }}</span>
+            </div>
+            <p v-if="articleData.authorDesc" class="author-bio">{{ articleData.authorDesc }}</p>
+            <p v-else class="author-bio placeholder">这个人很懒，什么都没写…</p>
+          </div>
+        </div>
+
         <h1 class="main-title">{{ articleData.title }}</h1>
         <div class="meta-info">
-          <span class="meta-left">
-            <span class="author">{{ articleData.author }}</span>
-            <span class="separator">·</span>
-            <span class="date">{{ articleData.date }}</span>
-          </span>
+          <span class="date">{{ articleData.date }}</span>
           <span class="views-badge">👁️ {{ articleData.views }}</span>
         </div>
 
@@ -326,19 +476,6 @@ onUnmounted(() => {
           >{{ tag }}</span>
         </div>
 
-        <!-- ==================== 作者信息卡片 ==================== -->
-        <div class="author-card">
-          <div class="author-avatar">{{ (articleData.author || '?')[0] }}</div>
-          <div class="author-info">
-            <div class="author-name-row">
-              <span class="author-name">{{ articleData.author }}</span>
-              <span v-if="articleData.department" class="author-dept">{{ articleData.department }}</span>
-            </div>
-            <p v-if="articleData.authorDesc" class="author-bio">{{ articleData.authorDesc }}</p>
-            <p v-else class="author-bio placeholder">这个人很懒，什么都没写…</p>
-          </div>
-        </div>
-
         <!-- ==================== 文章内互动栏（点赞 / 评论跳转 / 收藏 / 分享） ==================== -->
         <div class="inner-actions">
           <div class="action-btn" role="button" tabindex="0" aria-label="点赞" @click="toggleLike" @keydown.enter.prevent="toggleLike" @keydown.space.prevent="toggleLike">
@@ -353,7 +490,7 @@ onUnmounted(() => {
             <span class="icon">{{ articleData.isCollected ? '⭐' : '☆' }}</span>
             <span class="text">{{ articleData.isCollected ? '已收藏' : '收藏' }}</span>
           </div>
-          <div class="action-btn" role="button" tabindex="0" aria-label="分享" @click="shareArticle" @keydown.enter.prevent="shareArticle" @keydown.space.prevent="shareArticle">
+          <div class="action-btn" role="button" tabindex="0" aria-label="分享" @click="openShareSheet" @keydown.enter.prevent="openShareSheet" @keydown.space.prevent="openShareSheet">
             <span class="icon">📤</span>
             <span class="text">分享</span>
           </div>
@@ -381,10 +518,25 @@ onUnmounted(() => {
             >
               <!-- === 顶级评论 === -->
               <div class="comment-item">
-                <div class="comment-avatar">{{ comment.author[0] }}</div>
+                <div
+                  class="comment-avatar clickable"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="`查看 ${comment.author} 的主页`"
+                  @click.stop="goToCommentAuthor(comment.author)"
+                  @keydown.enter.prevent.stop="goToCommentAuthor(comment.author)"
+                  @keydown.space.prevent.stop="goToCommentAuthor(comment.author)"
+                >{{ comment.author[0] }}</div>
                 <div class="comment-main">
                   <div class="comment-meta">
-                    <span class="comment-author">{{ comment.author }}</span>
+                    <span
+                      class="comment-author clickable"
+                      role="button"
+                      tabindex="0"
+                      @click.stop="goToCommentAuthor(comment.author)"
+                      @keydown.enter.prevent.stop="goToCommentAuthor(comment.author)"
+                      @keydown.space.prevent.stop="goToCommentAuthor(comment.author)"
+                    >{{ comment.author }}</span>
                     <span class="comment-time">{{ comment.time }}</span>
                   </div>
                   <p class="comment-text">{{ comment.content }}</p>
@@ -419,10 +571,25 @@ onUnmounted(() => {
                       :key="reply.id"
                       class="reply-item"
                     >
-                      <div class="comment-avatar reply-avatar">{{ reply.author[0] }}</div>
+                      <div
+                        class="comment-avatar reply-avatar clickable"
+                        role="button"
+                        tabindex="0"
+                        :aria-label="`查看 ${reply.author} 的主页`"
+                        @click.stop="goToCommentAuthor(reply.author)"
+                        @keydown.enter.prevent.stop="goToCommentAuthor(reply.author)"
+                        @keydown.space.prevent.stop="goToCommentAuthor(reply.author)"
+                      >{{ reply.author[0] }}</div>
                       <div class="comment-main">
                         <div class="comment-meta">
-                          <span class="comment-author">{{ reply.author }}</span>
+                          <span
+                            class="comment-author clickable"
+                            role="button"
+                            tabindex="0"
+                            @click.stop="goToCommentAuthor(reply.author)"
+                            @keydown.enter.prevent.stop="goToCommentAuthor(reply.author)"
+                            @keydown.space.prevent.stop="goToCommentAuthor(reply.author)"
+                          >{{ reply.author }}</span>
                           <span class="comment-time">{{ reply.time }}</span>
                         </div>
                         <p class="comment-text">{{ reply.content }}</p>
@@ -499,6 +666,78 @@ onUnmounted(() => {
     <!-- ==================== Toast 提示 ==================== -->
     <div v-if="toastText" class="toast-bar" role="alert">{{ toastText }}</div>
 
+    <!-- ==================== 分享面板 ==================== -->
+    <teleport to="body">
+      <!-- 底部操作面板 -->
+      <transition name="sheet">
+        <div v-if="showShareSheet && !showFriendPicker" class="share-overlay" role="dialog" aria-modal="true" aria-label="分享方式" @click.self="closeShareSheet">
+          <div class="share-sheet">
+            <button class="share-sheet-item" @click="copyLink">
+              <span class="share-sheet-icon">🔗</span>
+              <span class="share-sheet-label">复制链接</span>
+              <span class="share-sheet-desc">将文章链接复制到剪贴板</span>
+            </button>
+            <button class="share-sheet-item" @click="openFriendPicker">
+              <span class="share-sheet-icon">👤</span>
+              <span class="share-sheet-label">分享给好友</span>
+              <span class="share-sheet-desc">通过站内消息发送给好友</span>
+            </button>
+            <button class="share-cancel-btn" @click="closeShareSheet">取消</button>
+          </div>
+        </div>
+      </transition>
+
+      <!-- 好友选择器 -->
+      <transition name="sheet">
+        <div v-if="showFriendPicker" class="friend-picker-overlay" role="dialog" aria-modal="true" aria-label="选择好友" @click.self="closeShareSheet">
+          <div class="friend-picker-panel">
+            <header class="friend-picker-header">
+              <span class="friend-picker-title">选择好友</span>
+              <button class="friend-picker-close" @click="closeShareSheet" aria-label="关闭">✕</button>
+            </header>
+
+            <!-- 加载态 -->
+            <div v-if="shareFriendsLoading" class="friend-picker-status">
+              <span class="loading-spinner"></span>
+              <p>加载好友列表…</p>
+            </div>
+
+            <!-- 错误态 -->
+            <div v-else-if="shareError" class="friend-picker-status">
+              <span class="status-icon">😕</span>
+              <p class="status-text">{{ shareError }}</p>
+            </div>
+
+            <!-- 好友列表 -->
+            <div v-else class="friend-picker-list">
+              <div
+                v-for="friend in friendStore.list"
+                :key="friend.id"
+                class="friend-picker-card"
+              >
+                <div class="fp-avatar" :class="friend.role">{{ friend.name[0] }}</div>
+                <div class="fp-info">
+                  <div class="fp-name-line">
+                    <span class="fp-name">{{ friend.name }}</span>
+                    <span class="fp-role">{{ friend.role }}</span>
+                  </div>
+                  <span class="fp-meta">{{ friend.department || '未分配部门' }} · {{ friend.account }}</span>
+                </div>
+                <button
+                  class="fp-send-btn"
+                  :class="{ sent: shareSendingIds.has(friend.id) }"
+                  :disabled="shareSendingIds.has(friend.id)"
+                  @click="sendToFriend(friend)"
+                >
+                  {{ shareSendingIds.has(friend.id) ? '...' : '发送' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </teleport>
+
     <!-- ==================== 底部评论输入栏 ==================== -->
     <div v-if="articleData" class="bottom-action-bar">
       <div class="comment-input-wrapper">
@@ -556,7 +795,12 @@ onUnmounted(() => {
 }
 .back-icon { font-size: 18px; margin-right: 4px; }
 .header-title { font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
-.header-right { width: 48px; }
+.header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 48px;
+}
 
 /* ==================== 内容区 ==================== */
 .detail-main {
@@ -601,12 +845,6 @@ onUnmounted(() => {
   color: var(--color-text-tertiary);
   margin-bottom: 24px;
 }
-.meta-left {
-  display: flex;
-  align-items: center;
-}
-.separator { margin: 0 6px; color: var(--color-border); }
-.author { color: var(--color-text-body); font-weight: 500; }
 .views-badge {
   font-size: 12px;
   color: var(--color-text-tertiary);
@@ -707,6 +945,14 @@ onUnmounted(() => {
   font-weight: 600;
   flex-shrink: 0;
 }
+.comment-avatar.clickable {
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.comment-avatar.clickable:hover,
+.comment-avatar.clickable:active {
+  transform: scale(1.1);
+}
 .comment-main {
   flex: 1;
   min-width: 0;
@@ -721,6 +967,16 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 600;
   color: var(--color-text-body);
+}
+.comment-author.clickable {
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.comment-author.clickable:hover,
+.comment-author.clickable:active {
+  opacity: 0.8;
+  text-decoration: underline;
 }
 .comment-time {
   font-size: 11px;
@@ -853,6 +1109,14 @@ onUnmounted(() => {
   border-radius: 12px;
   margin-bottom: 16px;
   align-items: flex-start;
+  transition: background 0.15s;
+}
+.author-card.clickable {
+  cursor: pointer;
+}
+.author-card.clickable:hover,
+.author-card.clickable:active {
+  background: var(--color-divider);
 }
 .author-avatar {
   width: 44px;
@@ -1068,4 +1332,341 @@ onUnmounted(() => {
   font-family: inherit;
 }
 .back-home-btn:active { opacity: 0.8; }
+
+/* ==================== 管理员三点菜单 ==================== */
+.admin-menu-wrapper {
+  position: relative;
+}
+.admin-menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.admin-menu-btn:hover,
+.admin-menu-btn:active,
+.admin-menu-btn.open {
+  background: var(--color-bg-page);
+}
+.admin-menu-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.admin-menu-btn .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-text-primary);
+  flex-shrink: 0;
+}
+
+/* 下拉菜单 */
+.admin-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 140px;
+  background: var(--color-bg-card);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  overflow: hidden;
+  z-index: 300;
+  animation: dropdown-in 0.15s ease;
+}
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 16px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: left;
+}
+.dropdown-item:hover,
+.dropdown-item:active {
+  background: var(--color-bg-page);
+}
+.dropdown-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.dropdown-item--danger {
+  color: #e53e3e;
+}
+.dropdown-item--danger:hover,
+.dropdown-item--danger:active {
+  background: #fff5f5;
+}
+.dropdown-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+/* ==================== 分享面板 ==================== */
+.share-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.share-sheet {
+  width: 100%;
+  max-width: 500px;
+  background: var(--color-bg-card);
+  border-radius: 16px 16px 0 0;
+  padding: 20px 16px 28px;
+  animation: sheet-up 0.25s ease;
+}
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.share-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+.share-sheet-item:hover,
+.share-sheet-item:active {
+  background: var(--color-bg-page);
+}
+.share-sheet-item + .share-sheet-item {
+  border-top: 1px solid var(--color-divider);
+}
+.share-sheet-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+  width: 44px;
+  text-align: center;
+}
+.share-sheet-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+}
+.share-sheet-desc {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-left: auto;
+}
+.share-cancel-btn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--color-divider);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.share-cancel-btn:hover {
+  background: var(--color-border);
+}
+
+/* ==================== 好友选择器 ==================== */
+.friend-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.friend-picker-panel {
+  width: 100%;
+  max-width: 500px;
+  max-height: 80vh;
+  background: var(--color-bg-card);
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  animation: sheet-up 0.25s ease;
+}
+.friend-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-divider);
+  flex-shrink: 0;
+}
+.friend-picker-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+.friend-picker-close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.friend-picker-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 12px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+.friend-picker-status .loading-spinner {
+  width: 28px; height: 28px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.friend-picker-status .status-icon {
+  font-size: 40px;
+}
+.friend-picker-status .status-text {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+.friend-picker-list {
+  overflow-y: auto;
+  padding: 8px 16px 28px;
+  flex: 1;
+}
+.friend-picker-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.friend-picker-card:last-child {
+  border-bottom: none;
+}
+.fp-avatar {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.fp-avatar[class*="一线"] { background: var(--color-primary); }
+.fp-avatar[class*="管理员"]:not([class*="超级"]) { background: #f59e0b; }
+.fp-avatar[class*="系统部署"] { background: #7c3aed; }
+.fp-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fp-name-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fp-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.fp-role {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--color-divider);
+  color: var(--color-text-tertiary);
+}
+.fp-meta {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fp-send-btn {
+  flex-shrink: 0;
+  padding: 6px 16px;
+  border-radius: 16px;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+.fp-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.fp-send-btn.sent {
+  background: var(--color-success);
+}
+
+/* 页面过渡 */
+.sheet-enter-active,
+.sheet-leave-active {
+  transition: opacity 0.25s ease;
+}
+.sheet-enter-active .share-sheet,
+.sheet-enter-active .friend-picker-panel,
+.sheet-leave-active .share-sheet,
+.sheet-leave-active .friend-picker-panel {
+  transition: transform 0.25s ease;
+}
+.sheet-enter-from,
+.sheet-leave-to {
+  opacity: 0;
+}
+.sheet-enter-from .share-sheet,
+.sheet-enter-from .friend-picker-panel {
+  transform: translateY(100%);
+}
+.sheet-leave-to .share-sheet,
+.sheet-leave-to .friend-picker-panel {
+  transform: translateY(100%);
+}
 </style>
