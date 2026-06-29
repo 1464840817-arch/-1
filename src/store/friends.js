@@ -3,6 +3,7 @@
 // API 优先，失败静默降级到本地
 import { reactive } from 'vue'
 import { load, save } from '../utils/storage.js'
+import { userStore } from './user.js'
 import {
   getFriendList,
   getFriendRequests,
@@ -11,25 +12,37 @@ import {
   removeFriend as apiRemoveFriend,
 } from '../api/friend.js'
 
-const STORAGE_KEY = 'friends'
+const STORAGE_KEY_BASE = 'friends'
 
-// ==================== 种子数据 ====================
-const SEED_FRIENDS = [
-  { id: 3, name: '李工', account: 'ENG_20230512', role: '一线工程师', department: '自动化部', isOnline: true },
-  { id: 4, name: '王工', account: 'ENG_20240108', role: '一线工程师', department: '设备维护部', isOnline: false },
-  { id: 5, name: '赵工', account: 'ENG_20231105', role: '一线工程师', department: '设备部', isOnline: true },
-]
+// 按用户 account 生成存储键，避免多标签页不同账号共享 localStorage 导致互相覆盖
+// 模块初始化阶段 userStore 可能尚未赋值（跨模块 TDZ），降级回退到共享键
+function getStorageKey() {
+  let account = ''
+  try {
+    // 运行时：优先读内存中的 userStore（本标签页当前用户，不受跨标签页影响）
+    account = userStore.account
+  } catch {
+    // 模块初始化阶段：userStore 在 TDZ 中，忽略
+  }
+  if (!account) {
+    // 降级：从共享键读取最后登录的账号
+    const shared = load('user', {})
+    account = shared.account || ''
+  }
+  if (!account) {
+    // 最终降级：无任何登录记录时使用默认账号
+    return `${STORAGE_KEY_BASE}_default`
+  }
+  return `${STORAGE_KEY_BASE}_${account}`
+}
 
 // ==================== 初始化：localStorage 优先 ====================
 function loadPersistedFriends() {
-  const stored = load(STORAGE_KEY, null)
-  // 剔除旧版种子数据（假 ID ≥100），避免跳转用户详情 404
-  if (stored && Array.isArray(stored) && stored.length > 0 && !stored.some(f => f.id >= 100)) {
+  const stored = load(getStorageKey(), null)
+  if (stored && Array.isArray(stored) && stored.length > 0) {
     return stored
   }
-  // API 未返回或数据来源为旧种子时，写入新版种子数据对齐数据库
-  save(STORAGE_KEY, SEED_FRIENDS)
-  return JSON.parse(JSON.stringify(SEED_FRIENDS))
+  return []
 }
 
 const persisted = loadPersistedFriends()
@@ -42,14 +55,16 @@ export const friendStore = reactive({
 
 // ==================== 持久化 ====================
 function persistFriends() {
-  save(STORAGE_KEY, [...friendStore.list])
+  save(getStorageKey(), [...friendStore.list])
 }
 
 // ==================== 初始化：从 API 同步 ====================
 export async function initFriendData() {
   try {
     const remote = await getFriendList()
-    if (Array.isArray(remote) && remote.length > 0) {
+    if (Array.isArray(remote)) {
+      // 始终以 API 数据为准（包括空数组），防止模块初始化阶段
+      // 用错误账号加载的 localStorage 数据污染当前用户的好友列表
       friendStore.list.length = 0
       friendStore.list.push(...remote)
     }

@@ -3,6 +3,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { userStore, clearLoginState, currentCanAccessAdmin } from '../store/user.js'
+import { friendStore, loadFriendRequests } from '../store/friends.js'
 import { getDelistedPosts } from '../api/article.js'
 import { getProfileVisibility } from '../api/tenant.js'
 import { request } from '../api/client.js'
@@ -97,7 +98,13 @@ const onPullEnd = async () => {
   pullDistance.value = 0
 }
 
-onMounted(() => { loadAll() })
+onMounted(() => {
+  loadAll()
+  loadFriendRequests()
+})
+
+// 待处理好友请求数（红色提醒）
+const pendingRequestsCount = computed(() => friendStore.requests.length)
 
 const handleEditProfile = () => {
   router.push('/profile/edit')
@@ -213,7 +220,8 @@ const handleLogout = () => {
           <span class="menu-label">好友管理</span>
           <span class="menu-hint">查看和管理好友列表</span>
         </span>
-        <svg class="menu-arrow" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <span v-if="pendingRequestsCount > 0" class="friend-request-badge" aria-label="有待处理的好友请求"></span>
+        <svg v-else class="menu-arrow" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <polyline points="9 18 15 12 9 6"/>
         </svg>
       </div>
@@ -577,6 +585,21 @@ const handleLogout = () => {
 }
 .menu-item:active .menu-arrow {
   transform: translateX(3px);
+}
+
+/* 好友请求红色圆点提醒 */
+.friend-request-badge {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e53e3e;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(229, 62, 62, 0.35);
+  animation: badge-pop 0.3s ease;
+}
+@keyframes badge-pop {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 
 /* ==================== 4. 退出登录 ==================== */

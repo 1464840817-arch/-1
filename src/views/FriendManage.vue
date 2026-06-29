@@ -241,6 +241,11 @@ const cancelDelete = () => {
             v-for="req in friendStore.requests"
             :key="req.messageId"
             class="request-card"
+            role="button"
+            tabindex="0"
+            @click="goToUser(req.senderId)"
+            @keydown.enter.prevent="goToUser(req.senderId)"
+            @keydown.space.prevent="goToUser(req.senderId)"
           >
             <div class="user-avatar" :class="{ online: req.isOnline }">
               {{ req.sender[0] }}
@@ -664,6 +669,11 @@ const cancelDelete = () => {
   align-items: flex-start;
   gap: 12px;
   box-shadow: 0 1px 3px rgba(239,68,68,0.06);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.request-card:active {
+  background: var(--color-bg-page);
 }
 .request-desc {
   font-size: 12px;

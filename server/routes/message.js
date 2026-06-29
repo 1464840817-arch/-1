@@ -65,6 +65,18 @@ export default async function messageRoutes(fastify) {
   })
 
   /**
+   * GET /user/messages/unread-count
+   * 获取全部未读消息总数（底部导航栏"消息"红点用，含私聊 + 通知）
+   */
+  fastify.get('/user/messages/unread-count', { preHandler: authGuard }, async (request) => {
+    const row = queryOne(
+      'SELECT COUNT(*) as cnt FROM messages WHERE user_id = ? AND unread = 1',
+      [request.user.userId],
+    )
+    return { count: row?.cnt || 0 }
+  })
+
+  /**
    * PUT /user/messages/read
    * Body: { ids: number[] }
    * 标记指定消息为已读

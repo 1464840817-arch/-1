@@ -88,6 +88,7 @@ const loadRelatedArticles = async () => {
     const { list } = await searchArticles({ tag: tags[0], pageSize: 6 })
     relatedArticles.value = (list || [])
       .filter(a => a.id !== articleData.value.id)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
       .slice(0, 3)
   } catch {
     relatedArticles.value = []
@@ -415,9 +416,6 @@ onUnmounted(() => {
     <main v-else class="detail-main">
       <div class="content-card">
 
-        <!-- 设备标签 -->
-        <div class="device-tag">{{ articleData.type }}</div>
-
         <!-- ==================== 作者信息卡片（紧贴标题上方） ==================== -->
         <div
           class="author-card"
@@ -444,6 +442,9 @@ onUnmounted(() => {
           <span class="date">{{ articleData.date }}</span>
           <span class="views-badge">👁️ {{ articleData.views }}</span>
         </div>
+
+        <!-- 设备标签 -->
+        <div class="device-tag">{{ articleData.type }}</div>
 
         <!-- 正文：故障描述 + 排查步骤 -->
         <div class="article-body">

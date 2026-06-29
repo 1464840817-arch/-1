@@ -62,7 +62,9 @@ const onPullEnd = async () => {
   pullDistance.value = 0
 }
 
-const myPosts = computed(() => posts.value)
+const myPosts = computed(() => {
+  return [...posts.value].sort((a, b) => new Date(b.date) - new Date(a.date))
+})
 
 // ==================== 管理模式 ====================
 const isManageMode = ref(false)

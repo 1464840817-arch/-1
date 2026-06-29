@@ -4,7 +4,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getUserProfile, getUserPosts } from '../api/user.js'
-import { isFriend, addToFriends, removeFromFriends, initFriendData } from '../store/friends.js'
+import { friendStore, isFriend, addToFriends, acceptFriendRequest, removeFromFriends, initFriendData, loadFriendRequests } from '../store/friends.js'
 import { userStore } from '../store/user.js'
 
 const router = useRouter()
@@ -40,7 +40,7 @@ const loadArticles = async () => {
   articlesError.value = ''
   try {
     const data = await getUserPosts(userId.value)
-    articles.value = data.list || []
+    articles.value = (data.list || []).sort((a, b) => new Date(b.date) - new Date(a.date))
     articlesTotal.value = data.total || 0
   } catch {
     articles.value = []
@@ -53,6 +53,11 @@ const loadArticles = async () => {
 // ==================== 好友状态 ====================
 const isCurrentFriend = computed(() => isFriend(userId.value))
 
+/** 当前用户是否已向我发送好友请求（待处理） */
+const hasPendingRequest = computed(() => {
+  return friendStore.requests.some(r => r.senderId === userId.value)
+})
+
 const isSelf = computed(() => {
   return userId.value === userStore.id || (profile.value && profile.value.account === userStore.account)
 })
@@ -64,17 +69,23 @@ const handleAddFriend = async () => {
   if (!profile.value || friendActionLoading.value) return
   friendActionLoading.value = true
   try {
-    await addToFriends({
-      id: profile.value.id,
-      name: profile.value.name,
-      account: profile.value.account,
-      role: profile.value.role,
-      department: profile.value.department,
-      isOnline: false,
-    })
-    showToast('已添加好友')
+    // 如果对方已发送好友请求，直接同意
+    if (hasPendingRequest.value) {
+      await acceptFriendRequest(userId.value)
+      showToast('已同意好友申请')
+    } else {
+      await addToFriends({
+        id: profile.value.id,
+        name: profile.value.name,
+        account: profile.value.account,
+        role: profile.value.role,
+        department: profile.value.department,
+        isOnline: false,
+      })
+      showToast('已添加好友')
+    }
   } catch {
-    showToast('添加失败')
+    showToast('操作失败')
   } finally {
     friendActionLoading.value = false
   }
@@ -117,6 +128,7 @@ const goToArticle = (id) => {
 // ==================== 生命周期 ====================
 onMounted(async () => {
   await initFriendData()
+  loadFriendRequests()
   loadProfile()
   loadArticles()
 })
@@ -177,7 +189,7 @@ onUnmounted(() => {
 
           <!-- 操作按钮（非本人） -->
           <div v-if="!isSelf" class="profile-actions">
-            <button v-if="route.query.from !== 'chat'" class="action-btn chat-btn" @click="goToChat">
+            <button v-if="isCurrentFriend && route.query.from !== 'chat'" class="action-btn chat-btn" @click="goToChat">
               &#x1F4AC; 私聊
             </button>
             <button
@@ -191,10 +203,11 @@ onUnmounted(() => {
             <button
               v-else
               class="action-btn add-friend-btn"
+              :class="{ 'accept-request-btn': hasPendingRequest }"
               :disabled="friendActionLoading"
               @click="handleAddFriend"
             >
-              {{ friendActionLoading ? '…' : '&#x2795; 添加好友' }}
+              {{ friendActionLoading ? '…' : hasPendingRequest ? '&#x2705; 同意好友申请' : '&#x2795; 添加好友' }}
             </button>
           </div>
         </div>
@@ -452,6 +465,15 @@ onUnmounted(() => {
 }
 .add-friend-btn:active:not(:disabled) {
   background: var(--color-primary);
+  color: #fff;
+}
+.accept-request-btn {
+  background: #dcfce7;
+  color: #16a34a;
+  border: 1px solid #16a34a;
+}
+.accept-request-btn:active:not(:disabled) {
+  background: #16a34a;
   color: #fff;
 }
 .unfriend-btn {

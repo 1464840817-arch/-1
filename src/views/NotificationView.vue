@@ -4,6 +4,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getNotifications, markAllAsRead, markAsRead, deleteMessage } from '../api/message.js'
+import { decrementUnread, loadUnreadCount } from '../store/messages.js'
 
 const router = useRouter()
 
@@ -168,7 +169,7 @@ const handleCardClick = (msg) => {
   if (swipedId.value !== null && swipedId.value !== msg.id) { dismissSwipe(); return }
   if (swipedId.value === msg.id) { dismissSwipe(); return }
   if (isManageMode.value) { toggleSelect(msg.id); return }
-  if (msg.unread) { msg.unread = false; markAsRead(msg.id).catch(() => {}) }
+  if (msg.unread) { msg.unread = false; markAsRead(msg.id).catch(() => {}); decrementUnread(1) }
   if (msg.targetId) {
     if (msg.type === 'friend') {
       router.push('/friend')
@@ -200,6 +201,8 @@ const deleteSelected = async () => {
 const handleMarkAllRead = async () => {
   messages.value.forEach(m => { m.unread = false })
   try { await markAllAsRead() } catch { /* 静默 */ }
+  // 全部已读后从服务端重新拉取准确未读数
+  loadUnreadCount()
 }
 
 // ==================== 导航 ====================

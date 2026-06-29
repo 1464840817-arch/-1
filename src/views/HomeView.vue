@@ -146,8 +146,10 @@ const filteredArticles = computed(() => {
   const list = activeFilterName.value === '全部'
     ? articles.value
     : articles.value.filter(a => a.tags && a.tags.includes(activeFilterName.value))
+  // 按时间降序排列（最新在前）
+  const sorted = [...list].sort((a, b) => new Date(b.date) - new Date(a.date))
   // 同步收藏状态
-  return list.map(a => ({ ...a, isCollected: isCollected(a.id) }))
+  return sorted.map(a => ({ ...a, isCollected: isCollected(a.id) }))
 })
 
 // ==================== 点赞功能（乐观更新 + API 同步） ====================

@@ -1,14 +1,22 @@
 // src/api/client.js
 // fetch 封装层 — 统一 base URL、JSON 序列化、错误处理、自动附带 token
 import { load } from '../utils/storage.js'
+// 静态导入 userStore — 存在循环依赖（client→user→auth→client），但 getToken()
+// 仅在 request() 被调用时执行（运行时），此时所有模块已初始化完毕，绑定有效
+import { userStore } from '../store/user.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 /**
- * 从 localStorage 读取 token（避免循环依赖 userStore）
- * 注意：必须与 user.js 中的 STORAGE_KEY 一致，且通过 storage.js 的 load() 读取（带 ic_ 前缀）
+ * 获取当前用户的 token
+ * 优先从内存中的 userStore 读取，防止多标签页场景下 localStorage 被其他账号覆盖
+ * 导致当前标签页发送错误的 token（跨账号状态污染）
+ *
+ * 降级：userStore.token 为空时（极早期初始化阶段），回退到 localStorage
  */
 function getToken() {
+  if (userStore && userStore.token) return userStore.token
+  // 降级：从 localStorage 读取（用于 userStore 尚未初始化的极早期阶段）
   const stored = load('user', {})
   return stored.token || ''
 }

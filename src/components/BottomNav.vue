@@ -1,6 +1,8 @@
 <!-- src/components/BottomNav.vue -->
 <script setup>
+import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { messageStore } from '../store/messages.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -12,6 +14,9 @@ const navItems = [
   { name: '消息', icon: '✉️', path: '/message' },
   { name: '我的', icon: '👤', path: '/profile' }
 ]
+
+// 消息未读数（底部导航红点）
+const unreadBadge = computed(() => messageStore.unread)
 
 // 点击跳转
 const switchTab = (path) => {
@@ -36,7 +41,10 @@ const switchTab = (path) => {
       @keydown.enter.prevent="switchTab(item.path)"
       @keydown.space.prevent="switchTab(item.path)"
     >
-      <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
+      <span class="nav-icon-wrap">
+        <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
+        <span v-if="item.name === '消息' && unreadBadge > 0" class="nav-badge" :aria-label="`${unreadBadge} 条未读消息`">{{ unreadBadge > 99 ? '99+' : unreadBadge }}</span>
+      </span>
       <span class="nav-text">{{ item.name }}</span>
     </div>
   </nav>
@@ -67,7 +75,36 @@ const switchTab = (path) => {
   user-select: none;
   transition: color 0.2s;
 }
-.nav-item .nav-icon { font-size: 22px; margin-bottom: 2px; }
+.nav-item .nav-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  margin-bottom: 2px;
+}
+.nav-item .nav-icon { font-size: 22px; }
+.nav-item .nav-badge {
+  position: absolute;
+  top: -6px;
+  right: -12px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: #e53e3e;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  line-height: 1;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(229, 62, 62, 0.35);
+  animation: badge-pop 0.3s ease;
+}
+@keyframes badge-pop {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
 .nav-item .nav-text { font-size: 11px; font-weight: 500; }
 .nav-item.active { color: var(--color-primary); }
 .nav-item.active .nav-icon { font-weight: bold; } /* 选中时图标稍微突出 */

@@ -21,7 +21,7 @@ const loadHistoryArticles = async (silent = false) => {
       if (article) results.push(article)
     } catch { /* 跳过已删除的文章 */ }
   }
-  historyArticles.value = results
+  historyArticles.value = results.sort((a, b) => new Date(b.date) - new Date(a.date))
   loading.value = false
   refreshing.value = false
 }

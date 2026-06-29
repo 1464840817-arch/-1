@@ -102,3 +102,12 @@ export function getDelistedPosts() {
 export function restoreArticle(id) {
   return request(`/articles/${id}/restore`, { method: 'PUT' })
 }
+
+/**
+ * 永久删除已下架文章（物理删除，不可恢复）
+ * @param {number} id
+ * @returns {Promise<object>}
+ */
+export function permanentDeleteArticle(id) {
+  return request(`/articles/${id}/permanent`, { method: 'DELETE' })
+}

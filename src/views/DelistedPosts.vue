@@ -1,11 +1,14 @@
 <!-- src/views/DelistedPosts.vue -->
 <!-- 已下架文章 — 展示当前用户已下架的文章列表，支持恢复操作 -->
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
-import { getDelistedPosts, restoreArticle } from '../api/article.js'
+import { getDelistedPosts, restoreArticle, permanentDeleteArticle } from '../api/article.js'
 
 const router = useRouter()
+
+// 注入 BottomNav 显隐控制（管理模式下隐藏底部导航栏）
+const setHideBottomNav = inject('setHideBottomNav', () => {})
 
 // ==================== 文章列表 ====================
 const posts = ref([])
@@ -60,7 +63,9 @@ const onPullEnd = async () => {
   pullDistance.value = 0
 }
 
-const myPosts = computed(() => posts.value)
+const myPosts = computed(() => {
+  return [...posts.value].sort((a, b) => new Date(b.date) - new Date(a.date))
+})
 
 // ==================== 管理模式 ====================
 const isManageMode = ref(false)
@@ -72,11 +77,13 @@ const enterManageMode = (preselectId = null) => {
   if (preselectId != null) {
     selectedIds.value.add(preselectId)
   }
+  setHideBottomNav(true)
 }
 
 const exitManageMode = () => {
   isManageMode.value = false
   selectedIds.value = new Set()
+  setHideBottomNav(false)
 }
 
 const toggleManageMode = () => {
@@ -158,6 +165,26 @@ const restoreSelected = async () => {
   }
 }
 
+/** 批量永久删除已下架文章 */
+const deleteSelected = async () => {
+  if (selectedIds.value.size === 0) return
+
+  const count = selectedIds.value.size
+  const ok = window.confirm(`确定要永久删除选中的 ${count} 篇文章吗？此操作不可撤销！`)
+  if (!ok) return
+
+  const idsToDelete = [...selectedIds.value]
+
+  // 乐观本地移除
+  posts.value = posts.value.filter(p => !idsToDelete.includes(p.id))
+  exitManageMode()
+
+  // 异步同步到服务端
+  for (const id of idsToDelete) {
+    try { await permanentDeleteArticle(id) } catch { /* 静默降级 */ }
+  }
+}
+
 // ==================== 导航 ====================
 const goBack = () => router.back()
 const goToDetail = (id) => {
@@ -172,6 +199,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelLongPress()
+  setHideBottomNav(false)
 })
 </script>
 
@@ -330,6 +358,13 @@ onUnmounted(() => {
         @click="restoreSelected"
       >
         🔄 恢复{{ selectedCount > 0 ? ` (${selectedCount})` : '' }}
+      </button>
+      <button
+        class="action-btn delete-btn"
+        :disabled="selectedCount === 0"
+        @click="deleteSelected"
+      >
+        🗑️ 删除{{ selectedCount > 0 ? ` (${selectedCount})` : '' }}
       </button>
     </div>
 
@@ -688,5 +723,12 @@ onUnmounted(() => {
 .restore-btn {
   background: var(--color-warning);
   color: #fff;
+}
+.delete-btn {
+  background: #e53e3e;
+  color: #fff;
+}
+.delete-btn:active:not(:disabled) {
+  background: #c53030;
 }
 </style>

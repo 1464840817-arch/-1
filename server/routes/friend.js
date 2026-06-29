@@ -94,18 +94,18 @@ export default async function friendRoutes(fastify) {
       return reply.status(400).send({ message: '已经是好友' })
     }
 
-    // 检查我是否已经给对方发过请求（未处理）
+    // 检查我是否已经给对方发过请求（仅匹配未处理的活跃请求）
     const myPending = queryOne(
-      "SELECT id FROM messages WHERE user_id = ? AND target_id = ? AND type = 'friend'",
+      "SELECT id FROM messages WHERE user_id = ? AND target_id = ? AND type = 'friend' AND action = '请求添加你为好友' AND unread = 1",
       [userId, request.user.userId],
     )
     if (myPending) {
       return { ok: true, status: 'already_requested' }
     }
 
-    // 检查对方是否已经给我发过请求 → 自动成为好友
+    // 检查对方是否已经给我发过请求 → 自动成为好友（仅匹配未处理的活跃请求）
     const theirRequest = queryOne(
-      "SELECT id FROM messages WHERE user_id = ? AND target_id = ? AND type = 'friend'",
+      "SELECT id FROM messages WHERE user_id = ? AND target_id = ? AND type = 'friend' AND action = '请求添加你为好友' AND unread = 1",
       [request.user.userId, userId],
     )
     if (theirRequest) {

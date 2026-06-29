@@ -4,6 +4,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getChatMessages, getNotificationCount, markAllAsRead, markAsRead, deleteMessage } from '../api/message.js'
+import { decrementUnread } from '../store/messages.js'
 
 const router = useRouter()
 
@@ -143,6 +144,8 @@ const handleConvClick = (conv) => {
       if ((m.targetId || m.sender) === key) m.unread = false
     })
     markAsRead(unreadMsgIds).catch(() => {})
+    // 乐观扣减底部导航栏消息红点数
+    decrementUnread(unreadMsgIds.length)
   }
   // 导航到用户详情页
   if (conv.targetId) router.push(`/user/${conv.targetId}`)

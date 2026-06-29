@@ -59,6 +59,14 @@ export function getNotificationCount() {
 }
 
 /**
+ * 获取全部未读消息总数（底部导航栏"消息"红点用，含私聊 + 通知）
+ * @returns {Promise<{count:number}>}
+ */
+export function getUnreadCount() {
+  return request('/user/messages/unread-count')
+}
+
+/**
  * 删除单条消息
  * @param {number} id - 消息 ID
  * @returns {Promise<void>}

@@ -17,7 +17,7 @@ import {
   clearHistory as apiClearHistory,
 } from '../api/history.js'
 
-const STORAGE_KEY = 'user'
+const STORAGE_KEY_BASE = 'user'
 
 // ==================== 默认值 ====================
 const DEFAULTS = {
@@ -33,9 +33,42 @@ const DEFAULTS = {
   historyIds: [],
 }
 
+// 按用户 account 生成存储键，避免多标签页不同账号共享 localStorage 导致互相覆盖
+// 模块初始化阶段 userStore 尚未赋值（TDZ），降级回退到共享键确定当前账号
+function getStorageKey() {
+  let account = ''
+  try {
+    // 运行时：优先读内存中的 userStore（本标签页当前用户，不受跨标签页影响）
+    account = userStore.account
+  } catch {
+    // 模块初始化阶段：userStore 在 TDZ 中，忽略
+  }
+  if (!account) {
+    // 降级：从共享键读取最后登录的账号
+    const shared = load(STORAGE_KEY_BASE, {})
+    account = shared.account || DEFAULTS.account
+  }
+  return `${STORAGE_KEY_BASE}_${account}`
+}
+
 // ==================== 初始化：localStorage 优先 ====================
 function loadPersistedState() {
-  const stored = load(STORAGE_KEY, {})
+  const userKey = getStorageKey()
+
+  // 优先从用户专属键加载
+  let stored = load(userKey, null)
+
+  // 回退到共享键（旧格式兼容 / 首次迁移）
+  if (!stored || !stored.token) {
+    const shared = load(STORAGE_KEY_BASE, {})
+    if (shared && shared.token) {
+      stored = shared
+      // 迁移：将旧格式数据写入用户专属键
+      save(userKey, stored)
+    }
+  }
+
+  if (!stored) stored = {}
   // 合并存储值与默认值（新字段用默认值兜底）
   const merged = { ...DEFAULTS, ...stored }
   // 确保数组字段不丢失
@@ -62,7 +95,7 @@ export const userStore = reactive({
 
 // ==================== 持久化存储 ====================
 function persistUser() {
-  save(STORAGE_KEY, {
+  const data = {
     name: userStore.name,
     account: userStore.account,
     avatar: userStore.avatar,
@@ -73,7 +106,11 @@ function persistUser() {
     isLoggedIn: userStore.isLoggedIn,
     collectIds: [...userStore.collectIds],
     historyIds: [...userStore.historyIds],
-  })
+  }
+  // 写入用户专属键（不同账号数据隔离，防止跨标签页覆盖）
+  save(getStorageKey(), data)
+  // 同时更新共享键（仅保留 account + token，用于会话恢复时查找最后登录账号）
+  save(STORAGE_KEY_BASE, { account: userStore.account, token: userStore.token })
 }
 
 // ==================== 初始化：从 API 同步最新数据 ====================

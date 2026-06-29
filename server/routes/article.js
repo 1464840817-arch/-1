@@ -345,6 +345,37 @@ export default async function articleRoutes(fastify) {
   })
 
   /**
+   * DELETE /articles/:id/permanent
+   * 永久删除已下架文章（需登录，仅作者本人或管理员）
+   * 仅在文章状态为 'delisted' 时可执行
+   */
+  fastify.delete('/articles/:id/permanent', { preHandler: authGuard }, async (request, reply) => {
+    const id = parseInt(request.params.id, 10)
+    const existing = queryOne('SELECT * FROM articles WHERE id = ?', [id])
+    if (!existing) {
+      return reply.status(404).send({ message: '文章不存在' })
+    }
+    if (existing.status !== 'delisted') {
+      return reply.status(400).send({ message: '仅已下架文章可永久删除，请先下架后再操作' })
+    }
+    const isOwner = existing.author === request.user.name || existing.author === request.user.account
+    const isAdminUser = request.user.role === '管理员' || request.user.role === '系统部署人员'
+    if (!isOwner && !isAdminUser) {
+      return reply.status(403).send({ message: '无权操作此文章' })
+    }
+
+    execute('DELETE FROM articles WHERE id = ?', [id])
+
+    // 操作日志
+    execute(
+      'INSERT INTO operation_logs (operator, operator_role, action, detail) VALUES (?, ?, ?, ?)',
+      [request.user.name, request.user.role, '永久删除文章', `永久删除了文章「${existing.title}」`],
+    )
+
+    return { ok: true }
+  })
+
+  /**
    * GET /user/posts?page=&pageSize=&status=
    * 获取当前用户发布的文章列表（支持分页和状态下架筛选）
    * status 可选值: 'published'（默认）, 'delisted', 'all'
