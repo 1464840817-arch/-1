@@ -2,6 +2,7 @@
 <!-- 通知中心 — 展示评论/回复/点赞/收藏/分享/系统通知，点击跳转关联文章 -->
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { PhBell, PhChatCircle, PhHeart, PhStar, PhShare, PhUsers, PhMegaphone, PhArrowBendUpLeft, PhUpload, PhX, PhArrowLeft } from '@phosphor-icons/vue'
 import { useRouter } from 'vue-router'
 import { getNotifications, markAllAsRead, markAsRead, deleteMessage } from '../api/message.js'
 import { decrementUnread, loadUnreadCount } from '../store/messages.js'
@@ -115,13 +116,13 @@ const dismissSwipe = () => { swipedId.value = null }
 
 // ==================== 类型配置 ====================
 const typeConfig = {
-  comment: { icon: '💬', color: 'var(--color-primary)', bg: 'var(--color-primary-light)', label: '评论' },
-  reply:   { icon: '↩️', color: 'var(--color-msg-reply)', bg: 'var(--color-msg-reply-bg)', label: '回复' },
-  like:    { icon: '❤️', color: 'var(--color-error)', bg: 'var(--color-error-bg)', label: '点赞' },
-  collect: { icon: '⭐', color: 'var(--color-warning)', bg: 'var(--color-warning-bg)', label: '收藏' },
-  share:   { icon: '📤', color: '#059669', bg: '#ECFDF5', label: '分享' },
-  friend:  { icon: '👥', color: '#7C3AED', bg: '#F5F3FF', label: '好友' },
-  system:  { icon: '📢', color: 'var(--color-msg-system)', bg: 'var(--color-msg-system-bg)', label: '系统' },
+  comment: { icon: PhChatCircle, color: 'var(--color-primary)', bg: 'var(--color-primary-light)', label: '评论' },
+  reply:   { icon: PhArrowBendUpLeft, color: '#059669', bg: '#ECFDF5', label: '回复' },
+  like:    { icon: PhHeart, color: 'var(--color-error)', bg: 'var(--color-error-bg)', label: '点赞' },
+  collect: { icon: PhStar, color: 'var(--color-warning)', bg: 'var(--color-warning-bg)', label: '收藏' },
+  share:   { icon: PhShare, color: '#059669', bg: '#ECFDF5', label: '分享' },
+  friend:  { icon: PhUsers, color: 'var(--color-primary)', bg: 'var(--color-primary-light)', label: '好友' },
+  system:  { icon: PhMegaphone, color: 'var(--color-text-tertiary)', bg: 'var(--color-divider)', label: '系统' },
 }
 
 const getTypeMeta = (type) => typeConfig[type] || typeConfig.system
@@ -218,14 +219,14 @@ onUnmounted(() => { cancelLongPress() })
     <!-- ==================== 顶部导航 ==================== -->
     <header class="page-header">
       <template v-if="isManageMode">
-        <span class="cancel-btn" role="button" tabindex="0" @click="exitManageMode" @keydown.enter.prevent="exitManageMode" @keydown.space.prevent="exitManageMode">✕ 取消</span>
+        <span class="cancel-btn" role="button" tabindex="0" @click="exitManageMode" @keydown.enter.prevent="exitManageMode" @keydown.space.prevent="exitManageMode"><PhX :size="15" /> 取消</span>
         <span class="title">已选 {{ selectedCount }} 项</span>
         <button class="batch-delete-btn" :disabled="selectedCount === 0" @click="deleteSelected">
           删除{{ selectedCount > 0 ? `(${selectedCount})` : '' }}
         </button>
       </template>
       <template v-else>
-        <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter.prevent="goBack" @keydown.space.prevent="goBack">&larr; 返回</span>
+        <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter.prevent="goBack" @keydown.space.prevent="goBack"><PhArrowLeft :size="18" class="back-icon" /> 返回</span>
         <div class="header-center">
           <h1 class="header-title">通知中心</h1>
           <span v-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
@@ -239,7 +240,7 @@ onUnmounted(() => { cancelLongPress() })
 
     <!-- ==================== 空状态 ==================== -->
     <div v-if="messages.length === 0" class="empty-state">
-      <span class="empty-icon">🔔</span>
+      <PhBell :size="56" />
       <p class="empty-text">暂无通知</p>
       <p class="empty-hint">当有人评论、点赞或收藏你的文章时，你会在这里收到通知</p>
     </div>
@@ -281,7 +282,9 @@ onUnmounted(() => { cancelLongPress() })
               <span v-if="isManageMode" class="select-checkbox" :class="{ checked: selectedIds.has(msg.id) }" role="checkbox" :aria-checked="selectedIds.has(msg.id) ? 'true' : 'false'" tabindex="0" @click.stop="toggleSelect(msg.id)" @keydown.enter.prevent.stop="toggleSelect(msg.id)" @keydown.space.prevent.stop="toggleSelect(msg.id)">
                 <span v-if="selectedIds.has(msg.id)" class="check-icon">✓</span>
               </span>
-              <div class="card-avatar" :style="{ background: getTypeMeta(msg.type).bg, color: getTypeMeta(msg.type).color }">{{ getTypeMeta(msg.type).icon }}</div>
+              <div class="card-avatar" :style="{ background: getTypeMeta(msg.type).bg, color: getTypeMeta(msg.type).color }">
+                <component :is="getTypeMeta(msg.type).icon" :size="18" />
+              </div>
               <div class="card-body">
                 <div class="card-title-row">
                   <span class="sender-name">{{ msg.sender }}</span>
@@ -313,7 +316,7 @@ onUnmounted(() => { cancelLongPress() })
 /* ==================== 顶部导航 ==================== */
 .page-header {
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 16px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -327,7 +330,11 @@ onUnmounted(() => { cancelLongPress() })
   color: var(--color-primary);
   font-weight: 500;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
+.back-icon { display: block; flex-shrink: 0; }
 .header-center {
   display: flex;
   align-items: center;
@@ -350,7 +357,7 @@ onUnmounted(() => { cancelLongPress() })
   color: #fff;
   font-size: 11px;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   line-height: 1;
 }
 .header-right {
@@ -366,7 +373,7 @@ onUnmounted(() => { cancelLongPress() })
   font-weight: 500;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   transition: background 0.15s;
   font-family: inherit;
 }
@@ -390,7 +397,7 @@ onUnmounted(() => { cancelLongPress() })
   padding: 100px 20px;
   text-align: center;
 }
-.empty-icon { font-size: 56px; margin-bottom: 16px; }
+.empty-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 16px; }
 .empty-text { font-size: 16px; font-weight: 600; color: var(--color-text-body); margin: 0 0 6px 0; }
 .empty-hint { font-size: 14px; color: var(--color-text-tertiary); margin: 0; max-width: 260px; line-height: 1.6; }
 
@@ -402,8 +409,8 @@ onUnmounted(() => { cancelLongPress() })
   color: var(--color-error);
   background: none;
   border: 1px solid var(--color-error);
-  border-radius: 6px;
-  padding: 5px 14px;
+  border-radius: var(--radius-btn);
+  padding: 4px 14px;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.2s;
@@ -439,7 +446,7 @@ onUnmounted(() => { cancelLongPress() })
 }
 .filter-tabs::-webkit-scrollbar { display: none; }
 .filter-item {
-  padding: 5px 14px; border-radius: 16px; font-size: 13px;
+  padding: 4px 14px; border-radius: var(--radius-full); font-size: 13px;
   background: var(--color-bg-card); color: var(--color-text-secondary);
   cursor: pointer; flex-shrink: 0; user-select: none;
   border: 1px solid var(--color-border); transition: all 0.2s;
@@ -458,7 +465,7 @@ onUnmounted(() => { cancelLongPress() })
 .group-label { font-size: 13px; font-weight: 600; color: var(--color-text-tertiary); margin-bottom: 8px; padding-left: 2px; }
 .group-cards {
   background: var(--color-bg-card); border-radius: 12px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03); overflow: hidden;
+  box-shadow: var(--shadow-card); overflow: hidden;
 }
 
 /* ==================== 左滑容器 ==================== */
@@ -479,7 +486,7 @@ onUnmounted(() => { cancelLongPress() })
 
 /* ==================== 消息卡片 ==================== */
 .message-card {
-  display: flex; align-items: flex-start; padding: 14px 16px; gap: 12px;
+  display: flex; align-items: flex-start; padding: 16px 16px; gap: 12px;
   cursor: pointer;
   transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1.2);
   position: relative; z-index: 1; background: var(--color-bg-card);
@@ -494,7 +501,7 @@ onUnmounted(() => { cancelLongPress() })
 .card-avatar {
   width: 40px; height: 40px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 18px; flex-shrink: 0; line-height: 1;
+  flex-shrink: 0; line-height: 1;
 }
 .card-body { flex: 1; min-width: 0; }
 .card-title-row {
@@ -507,7 +514,7 @@ onUnmounted(() => { cancelLongPress() })
   display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .card-meta {
-  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
   flex-shrink: 0; margin-left: 4px;
 }
 .time-text { font-size: 11px; color: var(--color-text-tertiary); white-space: nowrap; }

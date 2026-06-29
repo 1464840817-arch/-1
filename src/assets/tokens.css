@@ -1,4 +1,4 @@
-/* src/assets/tokens.css — 全局设计 Token（禁止修改） */
+/* src/assets/tokens.css — 全局设计 Token */
 
 :root {
   /* ===== 色彩系统 ===== */
@@ -13,18 +13,30 @@
   --color-border:        #E2E8F0;   /* 输入框边框、分割线 */
   --color-divider:       #F1F5F9;   /* 列表项底部分割 */
 
-  /* ===== 语义色彩（基于核心 token 派生） ===== */
+  /* ===== 语义色彩 ===== */
   --color-error:       #EF4444;
   --color-error-bg:    #FEF2F2;
   --color-success:     #10B981;
   --color-warning:     #F59E0B;
   --color-warning-bg:  #FFFBEB;
 
-  /* ===== 消息类型色 ===== */
-  --color-msg-reply:   #8B5CF6;
-  --color-msg-reply-bg:#F5F3FF;
-  --color-msg-system:  #6B7280;
-  --color-msg-system-bg:#F9FAFB;
+  /* ===== 圆角 ===== */
+  --radius-tag:  4px;       /* 标签、徽标 */
+  --radius-btn:  8px;       /* 按钮、输入框 */
+  --radius-card: 12px;      /* 卡片、弹窗 */
+  --radius-full: 9999px;    /* 圆形、胶囊 */
+
+  /* ===== 阴影 ===== */
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.04);
+
+  /* ===== 间距（4 的倍数） ===== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
 }
 
 /* ===== 全局无障碍 ===== */

@@ -2,7 +2,9 @@
 <!-- 我的发布 — 展示当前用户已发布的经验文章列表，支持管理（多选、删除、编辑） -->
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { PhArrowLeft, PhNotePencil, PhTrash, PhCaretUp, PhCaretDown, PhEye, PhX } from '@phosphor-icons/vue'
 import { useRouter } from 'vue-router'
+import { formatDateTime } from '../utils/date.js'
 import { userStore } from '../store/user.js'
 import { getMyPosts, deleteArticle } from '../api/article.js'
 
@@ -202,7 +204,8 @@ onUnmounted(() => {
     <!-- ==================== 顶部导航 ==================== -->
     <header class="page-header">
       <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="isManageMode ? exitManageMode() : goBack()" @keydown.enter.prevent="isManageMode ? exitManageMode() : goBack()" @keydown.space.prevent="isManageMode ? exitManageMode() : goBack()">
-        {{ isManageMode ? '✕ 取消' : '← 返回' }}
+        <template v-if="isManageMode"><PhX :size="15" class="back-icon" /> 取消</template>
+        <template v-else><PhArrowLeft :size="18" class="back-icon" /> 返回</template>
       </span>
       <span class="title">
         {{ isManageMode ? `已选 ${selectedCount} 项` : '我的发布' }}
@@ -260,7 +263,7 @@ onUnmounted(() => {
 
     <!-- ==================== 空状态 ==================== -->
     <div v-else-if="!loading && myPosts.length === 0" class="empty-state">
-      <span class="empty-icon">📝</span>
+      <span class="empty-icon"><PhNotePencil :size="56" /></span>
       <p class="empty-text">暂无发布文章</p>
       <p class="empty-hint">发布经验文章后会自动出现在这里</p>
       <button class="publish-btn" @click="router.push('/publish')">去发布经验</button>
@@ -280,7 +283,7 @@ onUnmounted(() => {
         class="pull-hint"
         :style="{ height: pullDistance + 'px', opacity: Math.min(pullDistance / PULL_THRESHOLD, 1) }"
       >
-        <span class="pull-icon">{{ pullDistance >= PULL_THRESHOLD ? '⬆️' : '⬇️' }}</span>
+        <span class="pull-icon"><PhCaretUp v-if="pullDistance >= PULL_THRESHOLD" :size="14" /><PhCaretDown v-else :size="14" /></span>
         <span class="pull-text">{{ pullDistance >= PULL_THRESHOLD ? '释放刷新' : '下拉刷新' }}</span>
       </div>
       <article
@@ -320,10 +323,10 @@ onUnmounted(() => {
 
         <div class="card-top-row">
           <span class="device-tag">{{ post.type }}</span>
-          <span class="views-badge">👁️ {{ post.views }}</span>
+          <span class="views-badge"><PhEye :size="20" /> {{ post.views }}</span>
         </div>
         <h3 class="post-title">{{ post.title }}</h3>
-        <span class="post-date">{{ post.date }}</span>
+        <span class="post-date">{{ formatDateTime(post.date) }}</span>
       </article>
 
       <!-- 列表底部 -->
@@ -345,7 +348,7 @@ onUnmounted(() => {
       @keydown.enter.prevent="router.push('/publish')"
       @keydown.space.prevent="router.push('/publish')"
     >
-      <span class="fab-icon">✏️</span>
+      <span class="fab-icon"><PhNotePencil :size="18" /></span>
       <span class="fab-text">发布经验</span>
     </div>
 
@@ -356,14 +359,14 @@ onUnmounted(() => {
         :disabled="selectedCount !== 1"
         @click="editSelected"
       >
-        ✏️ 编辑
+        <PhNotePencil :size="16" /> 编辑
       </button>
       <button
         class="action-btn delete-btn"
         :disabled="selectedCount === 0"
         @click="deleteSelected"
       >
-        🗑 删除{{ selectedCount > 0 ? ` (${selectedCount})` : '' }}
+        <PhTrash :size="16" /> 删除{{ selectedCount > 0 ? ` (${selectedCount})` : "" }}
       </button>
     </div>
 
@@ -380,7 +383,7 @@ onUnmounted(() => {
 /* --- 顶部导航 --- */
 .page-header {
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 16px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -394,7 +397,11 @@ onUnmounted(() => {
   color: var(--color-primary);
   font-weight: 500;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
+.back-icon { display: block; flex-shrink: 0; }
 .title {
   font-size: 16px;
   font-weight: 600;
@@ -472,12 +479,12 @@ onUnmounted(() => {
 /* --- 骨架屏 --- */
 .skeleton-card {
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px;
   border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .skeleton-row {
   display: flex;
@@ -525,15 +532,15 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   overflow: hidden;
   transition: height 0.15s;
   color: var(--color-text-tertiary);
   font-size: 13px;
 }
 .pull-icon {
-  font-size: 14px;
-  line-height: 1;
+  display: flex;
+  align-items: center;
 }
 .pull-text {
   user-select: none;
@@ -572,15 +579,16 @@ onUnmounted(() => {
   padding: 100px 20px;
   text-align: center;
 }
-.empty-icon { font-size: 56px; margin-bottom: 16px; }
+.empty-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 16px; }
 .empty-text { font-size: 16px; font-weight: 600; color: var(--color-text-body); margin: 0 0 6px 0; }
 .empty-hint { font-size: 14px; color: var(--color-text-tertiary); margin: 0 0 20px 0; }
 .publish-btn {
   background: var(--color-primary);
   color: #fff;
   border: none;
-  padding: 10px 28px;
-  border-radius: 8px;
+  height: 44px;
+  padding: 0 28px;
+  border-radius: var(--radius-btn);
   font-size: 14px;
   cursor: pointer;
 }
@@ -590,7 +598,7 @@ onUnmounted(() => {
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   max-width: 720px;
   margin-left: auto;
   margin-right: auto;
@@ -599,9 +607,9 @@ onUnmounted(() => {
 }
 .post-card {
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border);
   cursor: pointer;
   transition: all 0.15s;
@@ -669,8 +677,11 @@ onUnmounted(() => {
   font-weight: 500;
 }
 .views-badge {
-  font-size: 11px;
-  color: var(--color-text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  color: #94A3B8;
   flex-shrink: 0;
 }
 
@@ -694,7 +705,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
   padding: 20px 0 10px 0;
 }
 .footer-line {
@@ -716,31 +727,25 @@ onUnmounted(() => {
   bottom: 90px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 12px 20px;
-  background: rgba(37, 99, 235, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  background: var(--color-primary);
   color: #fff;
-  border-radius: 28px;
+  border-radius: 50%;
   font-size: 15px;
   font-weight: 500;
-  box-shadow:
-    0 4px 16px rgba(37, 99, 235, 0.35),
-    0 1px 4px rgba(0, 0, 0, 0.08);
   cursor: pointer;
   user-select: none;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s;
   z-index: 50;
 }
 .fab-button:active {
   transform: scale(0.95);
-  box-shadow:
-    0 2px 8px rgba(37, 99, 235, 0.25),
-    0 1px 2px rgba(0, 0, 0, 0.06);
 }
-.fab-icon { font-size: 18px; line-height: 1; }
-.fab-text { white-space: nowrap; }
+.fab-icon { display: flex; align-items: center; }
+.fab-text { display: none; }
 
 /* --- 管理模式底部操作栏 --- */
 .manage-bottom-bar {
@@ -755,16 +760,20 @@ onUnmounted(() => {
   display: flex;
   gap: 12px;
   z-index: 50;
-  box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
 }
 .action-btn {
   flex: 1;
-  padding: 12px 0;
-  border-radius: 8px;
+  height: 44px;
+  padding: 0;
+  border-radius: var(--radius-btn);
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: opacity 0.2s, transform 0.15s;
 }
 .action-btn:active:not(:disabled) {

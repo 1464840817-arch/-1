@@ -2,6 +2,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { PhNotePencil, PhHeart, PhEye, PhFolder, PhClock, PhPackage, PhUsers, PhShieldCheck, PhCaretUp, PhCaretDown } from '@phosphor-icons/vue'
 import { userStore, clearLoginState, currentCanAccessAdmin } from '../store/user.js'
 import { friendStore, loadFriendRequests } from '../store/friends.js'
 import { getDelistedPosts } from '../api/article.js'
@@ -59,13 +60,23 @@ const loadAll = async (silent = false) => {
   }
 }
 
+// 统计卡片图标映射（Phosphor 组件）
+const statIconMap = {
+  myPosts:     PhNotePencil,
+  totalLikes:  PhHeart,
+  totalViews:  PhEye,
+  collections: PhFolder,
+  history:     PhClock,
+  delisted:    PhPackage,
+}
+
 const allStats = computed(() => [
-  { key: 'myPosts', label: '我的发布', count: postCount.value, icon: '📝', color: 'green' },
-  { key: 'totalLikes', label: '获得点赞', count: totalLikes.value, icon: '❤️', color: 'red' },
-  { key: 'totalViews', label: '总浏览量', count: totalViews.value, icon: '👁️', color: 'blue' },
-  { key: 'collections', label: '收藏夹', count: userStore.collectIds.length, icon: '📁', color: 'purple' },
-  { key: 'history', label: '浏览历史', count: userStore.historyIds.length, icon: '🕒', color: 'amber' },
-  { key: 'delisted', label: '已下架文章', count: delistedCount.value, icon: '📦', color: 'slate' },
+  { key: 'myPosts',     label: '我的发布',   count: postCount.value,             iconKey: 'myPosts' },
+  { key: 'totalLikes',  label: '获得点赞',   count: totalLikes.value,            iconKey: 'totalLikes' },
+  { key: 'totalViews',  label: '总浏览量',   count: totalViews.value,            iconKey: 'totalViews' },
+  { key: 'collections', label: '收藏夹',     count: userStore.collectIds.length, iconKey: 'collections' },
+  { key: 'history',     label: '浏览历史',   count: userStore.historyIds.length, iconKey: 'history' },
+  { key: 'delisted',    label: '已下架文章', count: delistedCount.value,         iconKey: 'delisted' },
 ])
 
 // 根据可见性配置过滤看板卡片
@@ -142,7 +153,8 @@ const handleLogout = () => {
       class="pull-hint"
       :style="{ height: pullDistance + 'px', opacity: Math.min(pullDistance / PULL_THRESHOLD, 1) }"
     >
-      <span class="pull-icon">{{ pullDistance >= PULL_THRESHOLD ? '⬆️' : '⬇️' }}</span>
+      <PhCaretUp v-if="pullDistance >= PULL_THRESHOLD" :size="16" class="pull-icon" />
+      <PhCaretDown v-else :size="16" class="pull-icon" />
       <span class="pull-text">{{ pullDistance >= PULL_THRESHOLD ? '释放刷新' : '下拉刷新' }}</span>
     </div>
 
@@ -164,7 +176,8 @@ const handleLogout = () => {
       <!-- 头像 + 基本信息 -->
       <div class="card-body">
         <div class="avatar-wrapper">
-          <div class="avatar">{{ userStore.name[0] }}</div>
+          <img v-if="userStore.avatar" :src="userStore.avatar" class="avatar-img" alt="头像" />
+          <div v-else class="avatar">{{ userStore.name[0] }}</div>
           <span class="avatar-dot"></span>
         </div>
 
@@ -198,14 +211,13 @@ const handleLogout = () => {
         v-for="(stat, index) in stats"
         :key="index"
         class="stat-card"
-        :class="`stat-card--${stat.color}`"
         role="button"
         tabindex="0"
         @click="goToStat(stat.label)"
         @keydown.enter.prevent="goToStat(stat.label)"
         @keydown.space.prevent="goToStat(stat.label)"
       >
-        <span class="stat-icon">{{ stat.icon }}</span>
+        <component :is="statIconMap[stat.iconKey]" :size="22" class="stat-icon" />
         <span class="stat-count">{{ stat.count }}</span>
         <span class="stat-label">{{ stat.label }}</span>
       </div>
@@ -215,7 +227,7 @@ const handleLogout = () => {
     <div class="menu-card">
       <!-- 好友管理 -->
       <div class="menu-item" role="button" tabindex="0" @click="router.push('/friend')" @keydown.enter.prevent="router.push('/friend')" @keydown.space.prevent="router.push('/friend')">
-        <span class="menu-icon-box menu-icon-box--purple">👥</span>
+        <span class="menu-icon-box"><PhUsers :size="20" /></span>
         <span class="menu-text">
           <span class="menu-label">好友管理</span>
           <span class="menu-hint">查看和管理好友列表</span>
@@ -228,7 +240,7 @@ const handleLogout = () => {
 
       <!-- 管理中心（仅管理员及以上可见） -->
       <div v-if="currentCanAccessAdmin()" class="menu-item menu-item--admin" role="button" tabindex="0" @click="router.push('/admin')" @keydown.enter.prevent="router.push('/admin')" @keydown.space.prevent="router.push('/admin')">
-        <span class="menu-icon-box menu-icon-box--amber">🛡️</span>
+        <span class="menu-icon-box"><PhShieldCheck :size="20" /></span>
         <span class="menu-text">
           <span class="menu-label">管理中心</span>
           <span class="menu-hint">用户管理 · 系统配置</span>
@@ -269,9 +281,9 @@ const handleLogout = () => {
 /* ==================== 1. 个人资料卡片 ==================== */
 .profile-card {
   background: var(--color-bg-card);
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.02);
+  box-shadow: var(--shadow-card);
   margin-bottom: 16px;
 }
 
@@ -279,7 +291,7 @@ const handleLogout = () => {
 .card-banner {
   position: relative;
   height: 72px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-msg-reply) 100%);
+  background: linear-gradient(135deg, #2563EB 0%, #1E40AF 100%);
   opacity: 0.12;
 }
 /* 装饰性光斑 */
@@ -315,18 +327,25 @@ const handleLogout = () => {
   flex-shrink: 0;
 }
 .avatar {
-  width: 72px; height: 72px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-msg-reply) 100%);
+  width: 80px; height: 80px;
+  background: #E2E8F0;
   color: #fff;
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
   border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
   border: 3px solid #fff;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+  box-shadow: var(--shadow-card);
   letter-spacing: 1px;
+}
+.avatar-img {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #fff;
+  box-shadow: var(--shadow-card);
 }
 /* 在线状态指示点 */
 .avatar-dot {
@@ -347,7 +366,7 @@ const handleLogout = () => {
 .name-line {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 4px;
 }
 .user-name {
@@ -358,12 +377,12 @@ const handleLogout = () => {
   letter-spacing: 0.3px;
 }
 .role-badge {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   background: var(--color-primary-light);
   color: var(--color-primary);
-  padding: 3px 10px;
-  border-radius: 20px;
+  padding: 2px 8px;
+  border-radius: var(--radius-tag);
   white-space: nowrap;
   letter-spacing: 0.2px;
 }
@@ -387,20 +406,21 @@ const handleLogout = () => {
 
 /* --- 编辑按钮 --- */
 .card-actions {
-  padding: 14px 20px 18px 20px;
+  padding: 16px 20px 18px 20px;
   position: relative;
   z-index: 1;
 }
 .edit-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 18px;
-  background: var(--color-bg-page);
+  gap: 4px;
+  height: 44px;
+  padding: 0 20px;
+  background: var(--color-bg-card);
   color: var(--color-text-body);
   border: 1px solid var(--color-border);
-  border-radius: 20px;
-  font-size: 13px;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -410,9 +430,6 @@ const handleLogout = () => {
   border-color: var(--color-primary);
   color: var(--color-primary);
   background: var(--color-primary-light);
-}
-.edit-btn:active {
-  transform: scale(0.96);
 }
 .btn-icon {
   flex-shrink: 0;
@@ -428,43 +445,25 @@ const handleLogout = () => {
 
 .stat-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
-  padding: 14px 6px;
+  border-radius: var(--radius-card);
+  padding: 16px 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
   transition: all 0.18s ease;
-  position: relative;
-  overflow: hidden;
   flex: 0 0 calc((100% - 16px) / 3);
 }
-/* 顶部色条 */
-.stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 20%; right: 20%;
-  height: 3px;
-  border-radius: 0 0 3px 3px;
-  transition: all 0.2s;
-}
-.stat-card--blue::before    { background: var(--color-primary); }
-.stat-card--amber::before   { background: var(--color-warning); }
-.stat-card--green::before   { background: var(--color-success); }
-.stat-card--red::before     { background: var(--color-error); }
-.stat-card--purple::before  { background: #8b5cf6; }
-.stat-card--slate::before   { background: #64748b; }
 
 .stat-card:active {
   transform: scale(0.95);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  background: var(--color-bg-page);
 }
 
 .stat-icon {
-  font-size: 22px;
-  line-height: 1;
+  color: var(--color-primary);
   transition: transform 0.2s;
 }
 .stat-card:active .stat-icon {
@@ -490,13 +489,13 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   overflow: hidden;
   transition: height 0.15s;
   color: var(--color-text-tertiary);
   font-size: 13px;
 }
-.pull-icon { font-size: 14px; line-height: 1; }
+.pull-icon { display: block; }
 .pull-text { user-select: none; }
 .refresh-indicator {
   display: flex;
@@ -520,16 +519,16 @@ const handleLogout = () => {
 /* ==================== 3. 功能菜单 ==================== */
 .menu-card {
   background: var(--color-bg-card);
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   margin-bottom: 20px;
 }
 
 .menu-item {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   padding: 16px 18px;
   cursor: pointer;
   transition: background 0.15s;
@@ -544,14 +543,9 @@ const handleLogout = () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 20px;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
   flex-shrink: 0;
-}
-.menu-icon-box--purple {
-  background: var(--color-msg-reply-bg);
-}
-.menu-icon-box--amber {
-  background: #fef3c7;
 }
 
 /* 管理中心菜单项高亮 */
@@ -609,15 +603,15 @@ const handleLogout = () => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 14px 0;
+  height: 44px;
   background: var(--color-bg-card);
   color: var(--color-error);
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: var(--radius-btn);
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   transition: all 0.2s;
   font-family: inherit;
   letter-spacing: 0.5px;
@@ -625,9 +619,5 @@ const handleLogout = () => {
 .logout-btn:hover {
   background: var(--color-error-bg);
   border-color: rgba(239, 68, 68, 0.15);
-}
-.logout-btn:active {
-  transform: scale(0.97);
-  background: var(--color-error-bg);
 }
 </style>

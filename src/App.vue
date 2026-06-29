@@ -85,6 +85,14 @@ body { margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif;
   margin-right: auto;
   width: 100%;
 }
+
+/* ===== 全局交互状态 ===== */
+button:active:not(:disabled) { opacity: 0.9; }
+.list-item:active { background: var(--color-bg-page); }
+
+/* 收藏动画 */
+.collect-icon { transition: transform 0.2s ease; }
+.collect-icon.pulse { transform: scale(1.2); }
 </style>
 
 <style scoped>

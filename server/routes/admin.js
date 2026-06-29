@@ -16,7 +16,7 @@ export default async function adminRoutes(fastify) {
     const limit = Math.min(Math.max(parseInt(size, 10) || 50, 1), 200)
     const offset = (Math.max(parseInt(page, 10) || 1, 1) - 1) * limit
 
-    let sql = 'SELECT id, account, name, role, department, disabled, created_at FROM users WHERE 1=1'
+    let sql = 'SELECT id, account, name, role, department, avatar, disabled, created_at FROM users WHERE 1=1'
     let countSql = 'SELECT COUNT(*) as total FROM users WHERE 1=1'
     const params = []
     const countParams = []
@@ -51,6 +51,7 @@ export default async function adminRoutes(fastify) {
         account: u.account,
         role: u.role,
         department: u.department || '',
+        avatar: u.avatar || '',
         disabled: !!u.disabled,
         createdAt: u.created_at ? u.created_at.slice(0, 10) : '',
       })),

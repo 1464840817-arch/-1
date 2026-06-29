@@ -4,6 +4,7 @@
 import { ref, reactive, onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { getTenantConfig, updateTenantConfig as updateTenantConfigApi } from '../api/tenant.js'
+import { PhArrowLeft, PhTag, PhX } from '@phosphor-icons/vue'
 
 const router = useRouter()
 const toast = inject('showToast', null)
@@ -92,7 +93,7 @@ const goBack = () => router.back()
 
     <!-- 顶部导航 -->
     <header class="page-header">
-      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter="goBack" @keydown.space.prevent="goBack">← 返回</span>
+      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter="goBack" @keydown.space.prevent="goBack"><PhArrowLeft :size="18" class="back-icon" /> 返回</span>
       <span class="title">系统配置</span>
       <button
         class="save-btn"
@@ -169,7 +170,7 @@ const goBack = () => router.back()
               @click="removeDepartment(index)"
               @keydown.enter="removeDepartment(index)"
               @keydown.space.prevent="removeDepartment(index)"
-            >✕</span>
+            ><PhX :size="12" /></span>
           </div>
         </div>
 
@@ -194,7 +195,7 @@ const goBack = () => router.back()
 
       <!-- 分类标签提示 -->
       <div class="form-card hint-card">
-        <label class="form-label">🏷️ 分类标签</label>
+        <label class="form-label"><PhTag :size="18" /> 分类标签</label>
         <p class="hint-text">
           分类标签的增删改请在
           <span class="link-text" role="button" tabindex="0" @click="router.push('/search?admin=1')" @keydown.enter="router.push('/search?admin=1')" @keydown.space.prevent="router.push('/search?admin=1')">搜索页标签管理</span>
@@ -217,7 +218,7 @@ const goBack = () => router.back()
 /* --- 顶部导航 --- */
 .page-header {
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 16px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -227,10 +228,17 @@ const goBack = () => router.back()
   z-index: 10;
 }
 .back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 15px;
   color: var(--color-primary);
   font-weight: 500;
   cursor: pointer;
+}
+.back-icon {
+  display: block;
+  flex-shrink: 0;
 }
 .title {
   font-size: 16px;
@@ -242,8 +250,9 @@ const goBack = () => router.back()
   color: #fff;
   background: var(--color-primary);
   border: none;
-  padding: 7px 18px;
-  border-radius: 6px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: var(--radius-btn);
   font-weight: 500;
   cursor: pointer;
   font-family: inherit;
@@ -271,9 +280,9 @@ const goBack = () => router.back()
 }
 .form-card {
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 16px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
 }
 .form-label {
   display: block;
@@ -285,7 +294,7 @@ const goBack = () => router.back()
 .form-input {
   width: 100%;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-btn);
   padding: 10px 12px;
   font-size: 15px;
   color: var(--color-text-body);
@@ -325,11 +334,13 @@ const goBack = () => router.back()
   padding: 4px 10px;
   background: var(--color-primary-light);
   color: var(--color-primary);
-  border-radius: 16px;
+  border-radius: var(--radius-full);
   font-size: 13px;
   font-weight: 500;
 }
 .dept-remove {
+  display: flex;
+  align-items: center;
   font-size: 12px;
   cursor: pointer;
   padding: 0 2px;
@@ -355,7 +366,10 @@ const goBack = () => router.back()
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  padding: 10px 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0;
   user-select: none;
   transition: opacity 0.15s;
 }

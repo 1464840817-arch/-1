@@ -1,7 +1,7 @@
 <!-- src/views/ArticleDetail.vue -->
 <!-- 文章详情页 — 含评论互动系统 -->
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getArticle, incrementView, likeArticle, deleteArticle, shareArticle as apiShareArticle } from '../api/article.js'
 import { getComments, postComment, toggleLikeComment } from '../api/comment.js'
@@ -9,6 +9,8 @@ import { searchArticles } from '../api/search.js'
 import { toggleCollect as toggleCollectStore, isCollected, addHistory, currentIsAdmin } from '../store/user.js'
 import { friendStore, initFriendData } from '../store/friends.js'
 import { request } from '../api/client.js'
+import { PhArrowLeft, PhHeart, PhChatCircle, PhStar, PhShare, PhEye, PhTrash, PhWarning, PhNotePencil, PhLink, PhUser, PhX, PhFileText, PhNotepad, PhWrench, PhPaperclip, PhSmileySad, PhCaretLeft, PhCaretRight, PhImage } from '@phosphor-icons/vue'
+import { formatDateTime } from '../utils/date.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -55,6 +57,50 @@ const loadArticle = async (id) => {
 
 loadArticle(articleId.value)
 watch(articleId, (newId) => loadArticle(newId))
+
+// ==================== 解析描述中的图片标记 ====================
+const descParts = computed(() => {
+  const desc = articleData.value?.desc || ''
+  if (!desc) return []
+
+  const parts = []
+  const regex = /\[image:([^\]]+)\]/g
+  let lastIndex = 0
+  let match
+
+  while ((match = regex.exec(desc)) !== null) {
+    // 匹配前的文本
+    if (match.index > lastIndex) {
+      const text = desc.slice(lastIndex, match.index)
+      if (text) {
+        // 按换行拆分成段落
+        text.split('\n').forEach((line, i, arr) => {
+          if (line) parts.push({ type: 'text', text: line })
+          if (i < arr.length - 1 && arr[i + 1]) parts.push({ type: 'break' })
+        })
+      }
+    }
+    // 图片
+    const url = match[1]
+    // 如果 URL 已包含 /uploads/ 前缀则直接使用，否则拼接
+    const imageUrl = url.startsWith('/uploads/') ? url : `/uploads/${url}`
+    parts.push({ type: 'image', url: imageUrl })
+    lastIndex = match.index + match[0].length
+  }
+
+  // 剩余文本
+  if (lastIndex < desc.length) {
+    const text = desc.slice(lastIndex)
+    if (text) {
+      text.split('\n').forEach((line, i, arr) => {
+        if (line) parts.push({ type: 'text', text: line })
+        if (i < arr.length - 1 && arr[i + 1]) parts.push({ type: 'break' })
+      })
+    }
+  }
+
+  return parts
+})
 
 // ==================== 点赞文章 ====================
 const toggleLike = async () => {
@@ -287,6 +333,51 @@ const scrollToComments = () => {
   })
 }
 
+// ==================== 步骤图片灯箱 ====================
+const stepLightbox = reactive({
+  visible: false,
+  url: '',
+  index: 0,
+})
+
+// 收集所有步骤图片 URL
+const allStepImages = computed(() => {
+  const steps = articleData.value?.steps || []
+  const images = []
+  steps.forEach((s, i) => {
+    let imageUrl = null
+    if (typeof s === 'object' && s.image) {
+      imageUrl = s.image
+    }
+    if (imageUrl) {
+      images.push({ index: i, src: imageUrl })
+    }
+  })
+  return images
+})
+
+function openStepLightbox(imageUrl) {
+  if (!imageUrl) return
+  const all = allStepImages.value
+  const idx = all.findIndex(item => item.src === imageUrl)
+  stepLightbox.url = imageUrl
+  stepLightbox.index = idx >= 0 ? idx : 0
+  stepLightbox.visible = true
+}
+
+function closeStepLightbox() {
+  stepLightbox.visible = false
+  stepLightbox.url = ''
+  stepLightbox.index = 0
+}
+
+function navigateStepLightbox(direction) {
+  const all = allStepImages.value
+  if (all.length === 0) return
+  stepLightbox.index = (stepLightbox.index + direction + all.length) % all.length
+  stepLightbox.url = all[stepLightbox.index].src
+}
+
 // ==================== 导航 ====================
 const goBack = () => { router.back() }
 
@@ -371,7 +462,7 @@ onUnmounted(() => {
     <!-- ==================== 顶部导航 ==================== -->
     <header class="detail-header">
       <div class="header-left" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter.prevent="goBack" @keydown.space.prevent="goBack">
-        <span class="back-icon">⬅</span>
+        <PhArrowLeft :size="18" class="back-icon" />
         <span class="back-text">返回</span>
       </div>
       <span class="header-title">文章详情</span>
@@ -390,11 +481,11 @@ onUnmounted(() => {
           </button>
           <div v-if="showAdminMenu" class="admin-dropdown">
             <button class="dropdown-item" @click="handleAdminEdit">
-              <span class="dropdown-icon">✏️</span>
+              <PhNotePencil :size="15" class="dropdown-icon" />
               <span>修改文章</span>
             </button>
             <button class="dropdown-item dropdown-item--danger" :disabled="deleting" @click="handleAdminDelete">
-              <span class="dropdown-icon">🗑️</span>
+              <PhTrash :size="15" class="dropdown-icon" />
               <span>{{ deleting ? '下架中...' : '下架文章' }}</span>
             </button>
           </div>
@@ -405,7 +496,7 @@ onUnmounted(() => {
     <!-- ==================== 文章未找到 ==================== -->
     <main v-if="!articleData" class="detail-main">
       <div class="content-card not-found-card">
-        <div class="not-found-icon">📄</div>
+        <div class="not-found-icon"><PhFileText :size="48" /></div>
         <h2 class="not-found-title">文章不存在</h2>
         <p class="not-found-desc">该文章可能已被删除，或链接地址有误。</p>
         <button class="back-home-btn" @click="router.push('/home')">返回首页</button>
@@ -426,7 +517,8 @@ onUnmounted(() => {
           @keydown.enter.prevent="!fromUserDetail && goToAuthor()"
           @keydown.space.prevent="!fromUserDetail && goToAuthor()"
         >
-          <div class="author-avatar">{{ (articleData.author || '?')[0] }}</div>
+          <img v-if="articleData.authorAvatar" :src="articleData.authorAvatar" class="author-avatar-img" alt="" />
+          <div v-else class="author-avatar">{{ (articleData.author || '?')[0] }}</div>
           <div class="author-info">
             <div class="author-name-row">
               <span class="author-name">{{ articleData.author }}</span>
@@ -440,7 +532,7 @@ onUnmounted(() => {
         <h1 class="main-title">{{ articleData.title }}</h1>
         <div class="meta-info">
           <span class="date">{{ articleData.date }}</span>
-          <span class="views-badge">👁️ {{ articleData.views }}</span>
+          <span class="views-badge"><PhEye :size="20" /> {{ articleData.views }}</span>
         </div>
 
         <!-- 设备标签 -->
@@ -449,15 +541,35 @@ onUnmounted(() => {
         <!-- 正文：故障描述 + 排查步骤 -->
         <div class="article-body">
           <div class="paragraph-group">
-            <h3 class="sub-title">📋 故障描述</h3>
-            <p class="text-content">{{ articleData.desc }}</p>
+            <h3 class="sub-title"><PhNotepad :size="18" class="sub-title-icon" /> 故障描述</h3>
+            <div class="text-content">
+              <template v-for="(part, i) in descParts" :key="i">
+                <img v-if="part.type === 'image'" :src="part.url" class="desc-image" :alt="'图片 ' + (i + 1)" loading="lazy" />
+                <br v-else-if="part.type === 'break'" />
+                <span v-else>{{ part.text }}</span>
+              </template>
+              <span v-if="descParts.length === 0">{{ articleData.desc }}</span>
+            </div>
           </div>
           <div class="paragraph-group">
-            <h3 class="sub-title">🔧 排查步骤</h3>
+            <h3 class="sub-title"><PhWrench :size="18" class="sub-title-icon" /> 排查步骤</h3>
             <ul class="step-list">
               <li v-for="(step, index) in articleData.steps" :key="index">
-                <span class="step-num">{{ index + 1 }}.</span>
-                <span class="step-text">{{ step }}</span>
+                <span class="step-num">{{ index + 1 }}</span>
+                <div class="step-body">
+                  <span class="step-text">{{ typeof step === 'string' ? step : step.text }}</span>
+                  <div
+                    v-if="typeof step === 'object' && step.image"
+                    class="step-image-wrap"
+                    role="button"
+                    tabindex="0"
+                    @click="openStepLightbox(step.image)"
+                    @keydown.enter.prevent="openStepLightbox(step.image)"
+                    @keydown.space.prevent="openStepLightbox(step.image)"
+                  >
+                    <img :src="step.image" class="step-image" :alt="`步骤 ${index + 1} 图片`" loading="lazy" />
+                  </div>
+                </div>
               </li>
             </ul>
           </div>
@@ -480,19 +592,19 @@ onUnmounted(() => {
         <!-- ==================== 文章内互动栏（点赞 / 评论跳转 / 收藏 / 分享） ==================== -->
         <div class="inner-actions">
           <div class="action-btn" role="button" tabindex="0" aria-label="点赞" @click="toggleLike" @keydown.enter.prevent="toggleLike" @keydown.space.prevent="toggleLike">
-            <span class="icon">{{ articleData.isLiked ? '❤️' : '🤍' }}</span>
+            <PhHeart :size="16" class="icon" :weight="articleData.isLiked ? 'fill' : 'regular'" />
             <span class="text">{{ articleData.isLiked ? '已赞' : '点赞' }} {{ articleData.likes > 0 ? articleData.likes : '' }}</span>
           </div>
           <div class="action-btn" role="button" tabindex="0" aria-label="查看评论" @click="scrollToComments" @keydown.enter.prevent="scrollToComments" @keydown.space.prevent="scrollToComments">
-            <span class="icon">💬</span>
+            <PhChatCircle :size="16" class="icon" />
             <span class="text">评论 {{ commentCount > 0 ? commentCount : '' }}</span>
           </div>
           <div class="action-btn" role="button" tabindex="0" aria-label="收藏" @click="toggleCollect" @keydown.enter.prevent="toggleCollect" @keydown.space.prevent="toggleCollect">
-            <span class="icon">{{ articleData.isCollected ? '⭐' : '☆' }}</span>
+            <PhStar :size="16" class="icon" :weight="articleData.isCollected ? 'fill' : 'regular'" />
             <span class="text">{{ articleData.isCollected ? '已收藏' : '收藏' }}</span>
           </div>
           <div class="action-btn" role="button" tabindex="0" aria-label="分享" @click="openShareSheet" @keydown.enter.prevent="openShareSheet" @keydown.space.prevent="openShareSheet">
-            <span class="icon">📤</span>
+            <PhShare :size="16" class="icon" />
             <span class="text">分享</span>
           </div>
         </div>
@@ -506,7 +618,7 @@ onUnmounted(() => {
 
           <!-- 无评论 -->
           <div v-if="comments.length === 0" class="no-comments">
-            <span class="no-comments-icon">💬</span>
+            <PhChatCircle :size="32" class="no-comments-icon" />
             <p>暂无评论，来说两句吧</p>
           </div>
 
@@ -550,7 +662,7 @@ onUnmounted(() => {
                       @keydown.enter.prevent="toggleCommentLike(comment)"
                       @keydown.space.prevent="toggleCommentLike(comment)"
                     >
-                      <span>{{ comment.isLiked ? '❤️' : '🤍' }}</span>
+                      <PhHeart :size="12" :weight="comment.isLiked ? 'fill' : 'regular'" />
                       <span v-if="comment.likes > 0" class="like-count">{{ comment.likes }}</span>
                     </span>
                     <span
@@ -603,7 +715,7 @@ onUnmounted(() => {
                             @keydown.enter.prevent="toggleCommentLike(reply)"
                             @keydown.space.prevent="toggleCommentLike(reply)"
                           >
-                            <span>{{ reply.isLiked ? '❤️' : '🤍' }}</span>
+                            <PhHeart :size="12" :weight="reply.isLiked ? 'fill' : 'regular'" />
                             <span v-if="reply.likes > 0" class="like-count">{{ reply.likes }}</span>
                           </span>
                         </div>
@@ -634,7 +746,7 @@ onUnmounted(() => {
 
     <!-- ==================== 相关推荐 ==================== -->
     <section v-if="relatedArticles.length > 0" class="related-section">
-      <h3 class="related-title">📎 相关推荐</h3>
+      <h3 class="related-title"><PhPaperclip :size="18" class="related-title-icon" /> 相关推荐</h3>
       <div class="related-list">
         <article
           v-for="item in relatedArticles"
@@ -649,15 +761,15 @@ onUnmounted(() => {
         >
           <div class="related-card-header">
             <span class="related-type">{{ item.type }}</span>
-            <span class="related-date">{{ item.date }}</span>
+            <span class="related-date">{{ formatDateTime(item.date) }}</span>
           </div>
           <h4 class="related-card-title">{{ item.title }}</h4>
           <p class="related-card-desc">{{ item.desc }}</p>
           <div class="related-card-meta">
             <span>{{ item.author }}</span>
             <span class="related-stats">
-              <span v-if="item.likes">❤️ {{ item.likes }}</span>
-              <span>👁️ {{ item.views }}</span>
+              <span v-if="item.likes"><PhHeart :size="12" weight="fill" /> {{ item.likes }}</span>
+              <span><PhEye :size="20" /> {{ item.views }}</span>
             </span>
           </div>
         </article>
@@ -674,12 +786,12 @@ onUnmounted(() => {
         <div v-if="showShareSheet && !showFriendPicker" class="share-overlay" role="dialog" aria-modal="true" aria-label="分享方式" @click.self="closeShareSheet">
           <div class="share-sheet">
             <button class="share-sheet-item" @click="copyLink">
-              <span class="share-sheet-icon">🔗</span>
+              <PhLink :size="28" class="share-sheet-icon" />
               <span class="share-sheet-label">复制链接</span>
               <span class="share-sheet-desc">将文章链接复制到剪贴板</span>
             </button>
             <button class="share-sheet-item" @click="openFriendPicker">
-              <span class="share-sheet-icon">👤</span>
+              <PhUser :size="28" class="share-sheet-icon" />
               <span class="share-sheet-label">分享给好友</span>
               <span class="share-sheet-desc">通过站内消息发送给好友</span>
             </button>
@@ -694,7 +806,7 @@ onUnmounted(() => {
           <div class="friend-picker-panel">
             <header class="friend-picker-header">
               <span class="friend-picker-title">选择好友</span>
-              <button class="friend-picker-close" @click="closeShareSheet" aria-label="关闭">✕</button>
+              <button class="friend-picker-close" @click="closeShareSheet" aria-label="关闭"><PhX :size="20" /></button>
             </header>
 
             <!-- 加载态 -->
@@ -705,7 +817,7 @@ onUnmounted(() => {
 
             <!-- 错误态 -->
             <div v-else-if="shareError" class="friend-picker-status">
-              <span class="status-icon">😕</span>
+              <span class="status-icon"><PhSmileySad :size="28" /></span>
               <p class="status-text">{{ shareError }}</p>
             </div>
 
@@ -739,6 +851,48 @@ onUnmounted(() => {
       </transition>
     </teleport>
 
+    <!-- ==================== 步骤图片灯箱 ==================== -->
+    <teleport to="body">
+      <transition name="lightbox-fade">
+        <div
+          v-if="stepLightbox.visible"
+          class="lightbox-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="图片预览"
+          @click.self="closeStepLightbox"
+        >
+          <button class="lightbox-close" @click="closeStepLightbox" aria-label="关闭">
+            <PhX :size="24" />
+          </button>
+
+          <button
+            v-if="allStepImages.length > 1"
+            class="lightbox-arrow lightbox-arrow--left"
+            aria-label="上一张"
+            @click="navigateStepLightbox(-1)"
+          >
+            <PhCaretLeft :size="32" />
+          </button>
+
+          <img :src="stepLightbox.url" class="lightbox-image" alt="预览图片" />
+
+          <button
+            v-if="allStepImages.length > 1"
+            class="lightbox-arrow lightbox-arrow--right"
+            aria-label="下一张"
+            @click="navigateStepLightbox(1)"
+          >
+            <PhCaretRight :size="32" />
+          </button>
+
+          <span v-if="allStepImages.length > 1" class="lightbox-counter">
+            {{ stepLightbox.index + 1 }} / {{ allStepImages.length }}
+          </span>
+        </div>
+      </transition>
+    </teleport>
+
     <!-- ==================== 底部评论输入栏 ==================== -->
     <div v-if="articleData" class="bottom-action-bar">
       <div class="comment-input-wrapper">
@@ -753,10 +907,10 @@ onUnmounted(() => {
       </div>
       <div class="action-icons">
         <div class="icon-btn" role="button" tabindex="0" aria-label="点赞" @click="toggleLike" @keydown.enter.prevent="toggleLike" @keydown.space.prevent="toggleLike">
-          <span>{{ articleData.isLiked ? '❤️' : '🤍' }}</span>
+          <PhHeart :size="20" :weight="articleData.isLiked ? 'fill' : 'regular'" />
         </div>
         <div class="icon-btn" role="button" tabindex="0" aria-label="收藏" @click="toggleCollect" @keydown.enter.prevent="toggleCollect" @keydown.space.prevent="toggleCollect">
-          <span>{{ articleData.isCollected ? '⭐' : '☆' }}</span>
+          <PhStar :size="20" :weight="articleData.isCollected ? 'fill' : 'regular'" />
         </div>
       </div>
     </div>
@@ -768,7 +922,7 @@ onUnmounted(() => {
 /* ==================== 页面容器 ==================== */
 .detail-page {
   min-height: 100vh;
-  background-color: var(--color-bg-card);
+  background-color: var(--color-bg-page);
   display: flex;
   flex-direction: column;
   padding-bottom: 65px;
@@ -780,7 +934,7 @@ onUnmounted(() => {
   top: 0;
   z-index: 100;
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 16px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -794,7 +948,7 @@ onUnmounted(() => {
   font-weight: 500;
   cursor: pointer;
 }
-.back-icon { font-size: 18px; margin-right: 4px; }
+.back-icon { display: flex; color: var(--color-text-tertiary); margin-right: 4px; }
 .header-title { font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
 .header-right {
   display: flex;
@@ -826,7 +980,7 @@ onUnmounted(() => {
   background: var(--color-primary-light);
   color: var(--color-primary);
   padding: 4px 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-tag);
   font-size: 13px;
   font-weight: 500;
   margin-bottom: 12px;
@@ -847,8 +1001,11 @@ onUnmounted(() => {
   margin-bottom: 24px;
 }
 .views-badge {
-  font-size: 12px;
-  color: var(--color-text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  color: #94A3B8;
   flex-shrink: 0;
 }
 
@@ -860,11 +1017,24 @@ onUnmounted(() => {
   font-weight: 600;
   color: var(--color-text-primary);
   margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
+.sub-title-icon { display: flex; color: var(--color-text-tertiary); flex-shrink: 0; }
 .text-content {
   font-size: 15px;
   line-height: 1.8;
   color: var(--color-text-body);
+}
+.desc-image {
+  display: block;
+  width: 100%;
+  max-height: 200px;
+  border-radius: 8px;
+  background: #F1F5F9;
+  object-fit: contain;
+  margin: 8px 0;
 }
 .step-list {
   list-style: none;
@@ -873,17 +1043,45 @@ onUnmounted(() => {
 }
 .step-list li {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   margin-bottom: 12px;
   font-size: 15px;
   line-height: 1.6;
   color: var(--color-text-body);
 }
 .step-num {
-  color: var(--color-primary);
+  width: 24px;
+  text-align: right;
+  font-size: 16px;
+  color: #2563EB;
   font-weight: 600;
-  margin-right: 8px;
-  min-width: 20px;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+.step-body {
+  flex: 1;
+  min-width: 0;
+}
+.step-text {
+  font-size: 14px;
+  color: #334155;
+  font-weight: 400;
+}
+.step-image-wrap {
+  margin-top: 8px;
+  cursor: pointer;
+}
+.step-image {
+  width: 80px;
+  height: 80px;
+  border-radius: 4px;
+  object-fit: cover;
+  display: block;
+  background: #F1F5F9;
+  transition: opacity 0.15s;
+}
+.step-image-wrap:active .step-image {
+  opacity: 0.8;
 }
 
 /* ==================== 评论区域 ==================== */
@@ -911,10 +1109,10 @@ onUnmounted(() => {
 /* 无评论 */
 .no-comments {
   text-align: center;
-  padding: 30px 0;
+  padding: 32px 0;
   color: var(--color-text-tertiary);
 }
-.no-comments-icon { font-size: 32px; display: block; margin-bottom: 8px; }
+.no-comments-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 8px; }
 .no-comments p { font-size: 14px; margin: 0; }
 
 /* 评论列表 */
@@ -930,15 +1128,15 @@ onUnmounted(() => {
 /* 单条评论 */
 .comment-item {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   padding: 12px 0;
 }
 .comment-avatar {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--color-primary-light);
-  color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -999,7 +1197,7 @@ onUnmounted(() => {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   user-select: none;
 }
 .comment-action:active { color: var(--color-primary); }
@@ -1015,7 +1213,7 @@ onUnmounted(() => {
 }
 .reply-item {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   padding: 8px 0;
 }
 .reply-avatar {
@@ -1047,7 +1245,7 @@ onUnmounted(() => {
   background: var(--color-primary);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-btn);
   padding: 8px 14px;
   font-size: 13px;
   font-weight: 500;
@@ -1069,13 +1267,13 @@ onUnmounted(() => {
 .action-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   font-size: 14px;
   color: var(--color-text-secondary);
   cursor: pointer;
   user-select: none;
 }
-.action-btn .icon { font-size: 16px; }
+.action-btn .icon { display: flex; color: var(--color-text-tertiary); }
 .action-btn:active { color: var(--color-primary); }
 
 /* ==================== 标签 ==================== */
@@ -1091,7 +1289,7 @@ onUnmounted(() => {
   font-size: 13px;
   color: var(--color-primary);
   background: var(--color-primary-light);
-  border-radius: 14px;
+  border-radius: var(--radius-tag);
   cursor: pointer;
   user-select: none;
   transition: all 0.2s;
@@ -1123,13 +1321,20 @@ onUnmounted(() => {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary), #5b8def);
+  background: #E2E8F0;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   font-weight: 700;
+  flex-shrink: 0;
+}
+.author-avatar-img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
   flex-shrink: 0;
 }
 .author-info {
@@ -1152,7 +1357,7 @@ onUnmounted(() => {
   color: var(--color-primary);
   background: var(--color-primary-light);
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   font-weight: 500;
 }
 .author-bio {
@@ -1184,17 +1389,21 @@ onUnmounted(() => {
   font-weight: 600;
   color: var(--color-text-primary);
   margin: 0 0 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
+.related-title-icon { display: flex; color: var(--color-text-tertiary); flex-shrink: 0; }
 .related-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .related-card {
   background: var(--color-bg-card);
   border-radius: 12px;
-  padding: 14px 16px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  padding: 16px 16px;
+  box-shadow: var(--shadow-card);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -1212,7 +1421,7 @@ onUnmounted(() => {
   color: var(--color-primary);
   background: var(--color-primary-light);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-tag);
   font-weight: 500;
 }
 .related-date {
@@ -1245,7 +1454,7 @@ onUnmounted(() => {
 }
 .related-stats {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
 /* ==================== Toast ==================== */
@@ -1258,7 +1467,7 @@ onUnmounted(() => {
   color: #fff;
   font-size: 14px;
   padding: 10px 24px;
-  border-radius: 24px;
+  border-radius: var(--radius-btn);
   z-index: 300;
   pointer-events: none;
   white-space: nowrap;
@@ -1287,9 +1496,12 @@ onUnmounted(() => {
 }
 .comment-input-wrapper {
   flex: 1;
+  height: 48px;
   background: var(--color-divider);
-  border-radius: 20px;
-  padding: 6px 16px;
+  border-radius: var(--radius-btn);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
 }
 .comment-input {
   width: 100%;
@@ -1297,7 +1509,6 @@ onUnmounted(() => {
   background: transparent;
   outline: none;
   font-size: 14px;
-  padding: 6px 0;
   font-family: inherit;
 }
 .comment-input::placeholder { color: var(--color-text-tertiary); }
@@ -1307,7 +1518,7 @@ onUnmounted(() => {
   align-items: center;
 }
 .icon-btn {
-  font-size: 20px;
+  display: flex;
   color: var(--color-text-secondary);
   cursor: pointer;
   padding: 4px;
@@ -1324,12 +1535,12 @@ onUnmounted(() => {
   text-align: center;
   padding-top: 80px;
 }
-.not-found-icon { font-size: 64px; margin-bottom: 16px; }
+.not-found-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 16px; }
 .not-found-title { font-size: 20px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 8px; }
 .not-found-desc { font-size: 14px; color: var(--color-text-tertiary); margin-bottom: 24px; }
 .back-home-btn {
   background: var(--color-primary); color: #fff; border: none;
-  padding: 10px 32px; border-radius: 8px; font-size: 15px; cursor: pointer;
+  padding: 10px 32px; border-radius: var(--radius-btn); font-size: 15px; cursor: pointer;
   font-family: inherit;
 }
 .back-home-btn:active { opacity: 0.8; }
@@ -1346,7 +1557,7 @@ onUnmounted(() => {
   border: none;
   background: transparent;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   transition: background 0.15s;
 }
 .admin-menu-btn:hover,
@@ -1374,8 +1585,8 @@ onUnmounted(() => {
   margin-top: 4px;
   min-width: 140px;
   background: var(--color-bg-card);
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
   z-index: 300;
   animation: dropdown-in 0.15s ease;
@@ -1389,7 +1600,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 11px 16px;
+  padding: 12px 16px;
   border: none;
   background: transparent;
   font-size: 14px;
@@ -1415,7 +1626,8 @@ onUnmounted(() => {
   background: #fff5f5;
 }
 .dropdown-icon {
-  font-size: 15px;
+  display: flex;
+  color: var(--color-text-tertiary);
   flex-shrink: 0;
 }
 
@@ -1424,7 +1636,7 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 400;
-  background: rgba(0,0,0,0.4);
+  background: rgba(15,23,42,0.5);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1452,7 +1664,7 @@ onUnmounted(() => {
   cursor: pointer;
   text-align: left;
   font-family: inherit;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   transition: background 0.15s;
 }
 .share-sheet-item:hover,
@@ -1463,10 +1675,11 @@ onUnmounted(() => {
   border-top: 1px solid var(--color-divider);
 }
 .share-sheet-icon {
-  font-size: 28px;
+  display: flex;
+  color: var(--color-text-tertiary);
   flex-shrink: 0;
   width: 44px;
-  text-align: center;
+  justify-content: center;
 }
 .share-sheet-label {
   font-size: 16px;
@@ -1485,7 +1698,7 @@ onUnmounted(() => {
   margin-top: 12px;
   padding: 14px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   background: var(--color-divider);
   font-size: 15px;
   font-weight: 500;
@@ -1503,7 +1716,7 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   z-index: 400;
-  background: rgba(0,0,0,0.4);
+  background: rgba(15,23,42,0.5);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1559,7 +1772,8 @@ onUnmounted(() => {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .friend-picker-status .status-icon {
-  font-size: 40px;
+  display: flex;
+  color: var(--color-text-tertiary);
 }
 .friend-picker-status .status-text {
   margin: 0;
@@ -1592,9 +1806,9 @@ onUnmounted(() => {
   color: #fff;
   flex-shrink: 0;
 }
-.fp-avatar[class*="一线"] { background: var(--color-primary); }
-.fp-avatar[class*="管理员"]:not([class*="超级"]) { background: #f59e0b; }
-.fp-avatar[class*="系统部署"] { background: #7c3aed; }
+.fp-avatar[class*="一线"] { background: #E2E8F0; }
+.fp-avatar[class*="管理员"]:not([class*="超级"]) { background: #E2E8F0; }
+.fp-avatar[class*="系统部署"] { background: #E2E8F0; }
 .fp-info {
   flex: 1;
   min-width: 0;
@@ -1605,7 +1819,7 @@ onUnmounted(() => {
 .fp-name-line {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 .fp-name {
   font-size: 15px;
@@ -1615,7 +1829,7 @@ onUnmounted(() => {
 .fp-role {
   font-size: 10px;
   padding: 1px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   background: var(--color-divider);
   color: var(--color-text-tertiary);
 }
@@ -1645,6 +1859,87 @@ onUnmounted(() => {
 }
 .fp-send-btn.sent {
   background: var(--color-success);
+}
+
+/* ==================== 步骤图片灯箱 ==================== */
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: background 0.2s;
+}
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+.lightbox-image {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 4px;
+  user-select: none;
+}
+.lightbox-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: background 0.2s;
+}
+.lightbox-arrow:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+.lightbox-arrow--left {
+  left: 16px;
+}
+.lightbox-arrow--right {
+  right: 16px;
+}
+.lightbox-counter {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 500;
+}
+.lightbox-fade-enter-active,
+.lightbox-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.lightbox-fade-enter-from,
+.lightbox-fade-leave-to {
+  opacity: 0;
 }
 
 /* 页面过渡 */

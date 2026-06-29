@@ -2,6 +2,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { PhMagnifyingGlass, PhHouse, PhChatCircle, PhUser } from '@phosphor-icons/vue'
 import { messageStore } from '../store/messages.js'
 
 const router = useRouter()
@@ -9,11 +10,19 @@ const route = useRoute()
 
 // 导航项配置
 const navItems = [
-  { name: '搜索', icon: '🔍', path: '/search' },
-  { name: '首页', icon: '🏠', path: '/home' },
-  { name: '消息', icon: '✉️', path: '/message' },
-  { name: '我的', icon: '👤', path: '/profile' }
+  { name: '搜索', path: '/search' },
+  { name: '首页', path: '/home' },
+  { name: '消息', path: '/message' },
+  { name: '我的', path: '/profile' },
 ]
+
+// 图标映射
+const iconMap = {
+  '/search':  PhMagnifyingGlass,
+  '/home':    PhHouse,
+  '/message': PhChatCircle,
+  '/profile': PhUser,
+}
 
 // 消息未读数（底部导航红点）
 const unreadBadge = computed(() => messageStore.unread)
@@ -42,8 +51,8 @@ const switchTab = (path) => {
       @keydown.space.prevent="switchTab(item.path)"
     >
       <span class="nav-icon-wrap">
-        <span class="nav-icon" aria-hidden="true">{{ item.icon }}</span>
-        <span v-if="item.name === '消息' && unreadBadge > 0" class="nav-badge" :aria-label="`${unreadBadge} 条未读消息`">{{ unreadBadge > 99 ? '99+' : unreadBadge }}</span>
+        <component :is="iconMap[item.path]" :size="22" class="nav-icon" aria-hidden="true" />
+        <span v-if="item.name === '消息' && unreadBadge > 0" class="nav-badge" aria-label="有未读消息"></span>
       </span>
       <span class="nav-text">{{ item.name }}</span>
     </div>
@@ -80,24 +89,15 @@ const switchTab = (path) => {
   display: inline-flex;
   margin-bottom: 2px;
 }
-.nav-item .nav-icon { font-size: 22px; }
+.nav-item .nav-icon { display: block; }
 .nav-item .nav-badge {
   position: absolute;
-  top: -6px;
-  right: -12px;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 9px;
+  top: -4px;
+  right: -8px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
   background: #e53e3e;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 5px;
-  line-height: 1;
-  box-sizing: border-box;
   box-shadow: 0 1px 3px rgba(229, 62, 62, 0.35);
   animation: badge-pop 0.3s ease;
 }
@@ -107,5 +107,4 @@ const switchTab = (path) => {
 }
 .nav-item .nav-text { font-size: 11px; font-weight: 500; }
 .nav-item.active { color: var(--color-primary); }
-.nav-item.active .nav-icon { font-weight: bold; } /* 选中时图标稍微突出 */
 </style>

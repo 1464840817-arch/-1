@@ -5,6 +5,8 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { userStore } from '../store/user.js'
 import { getArticle } from '../api/article.js'
+import { PhArrowLeft, PhFolder, PhCaretUp, PhCaretDown, PhHeart, PhChatCircle } from '@phosphor-icons/vue'
+import { formatDateTime } from '../utils/date.js'
 
 const router = useRouter()
 
@@ -64,7 +66,7 @@ const goToDetail = (id) => router.push(`/article/${id}`)
 
     <!-- 顶部导航 -->
     <header class="page-header">
-      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter.prevent="goBack" @keydown.space.prevent="goBack">← 返回</span>
+      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter.prevent="goBack" @keydown.space.prevent="goBack"><PhArrowLeft :size="18" class="back-icon" /> 返回</span>
       <span class="title">收藏夹</span>
       <span class="header-count">{{ collectedArticles.length }} 篇</span>
     </header>
@@ -93,9 +95,9 @@ const goToDetail = (id) => router.push(`/article/${id}`)
 
     <!-- 空状态 -->
     <div v-else-if="!loading && collectedArticles.length === 0" class="empty-state">
-      <span class="empty-icon">📁</span>
+      <span class="empty-icon"><PhFolder :size="56" /></span>
       <p class="empty-text">收藏夹还是空的</p>
-      <p class="empty-hint">浏览文章时点击 ⭐ 即可收藏</p>
+      <p class="empty-hint">浏览文章时点击星标即可收藏</p>
       <button class="browse-btn" @click="router.push('/home')">去首页看看</button>
     </div>
 
@@ -113,7 +115,7 @@ const goToDetail = (id) => router.push(`/article/${id}`)
         class="pull-hint"
         :style="{ height: pullDistance + 'px', opacity: Math.min(pullDistance / PULL_THRESHOLD, 1) }"
       >
-        <span class="pull-icon">{{ pullDistance >= PULL_THRESHOLD ? '⬆️' : '⬇️' }}</span>
+        <span class="pull-icon"><PhCaretUp v-if="pullDistance >= PULL_THRESHOLD" :size="14" /><PhCaretDown v-else :size="14" /></span>
         <span class="pull-text">{{ pullDistance >= PULL_THRESHOLD ? '释放刷新' : '下拉刷新' }}</span>
       </div>
       <article
@@ -128,15 +130,15 @@ const goToDetail = (id) => router.push(`/article/${id}`)
       >
         <div class="card-header">
           <span class="device-tag">{{ article.type }}</span>
-          <span class="article-date">{{ article.date }}</span>
+          <span class="article-date">{{ formatDateTime(article.date) }}</span>
         </div>
         <h3 class="article-title">{{ article.title }}</h3>
         <p class="article-desc">{{ article.desc }}</p>
         <div class="card-footer">
           <span class="author">{{ article.author }}</span>
           <div class="stats">
-            <span>❤️ {{ article.likes }}</span>
-            <span>💬 {{ article.comments }}</span>
+            <span><PhHeart :size="12" /> {{ article.likes }}</span>
+            <span><PhChatCircle :size="12" /> {{ article.comments }}</span>
           </div>
         </div>
       </article>
@@ -155,7 +157,7 @@ const goToDetail = (id) => router.push(`/article/${id}`)
 /* --- 顶部 --- */
 .page-header {
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 16px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -169,7 +171,11 @@ const goToDetail = (id) => router.push(`/article/${id}`)
   color: var(--color-primary);
   font-weight: 500;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
+.back-icon { display: block; flex-shrink: 0; }
 .title {
   font-size: 16px;
   font-weight: 600;
@@ -183,12 +189,12 @@ const goToDetail = (id) => router.push(`/article/${id}`)
 /* --- 骨架屏 --- */
 .skeleton-card {
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px;
   border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .skeleton-row {
   display: flex;
@@ -232,13 +238,13 @@ const goToDetail = (id) => router.push(`/article/${id}`)
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   overflow: hidden;
   transition: height 0.15s;
   color: var(--color-text-tertiary);
   font-size: 13px;
 }
-.pull-icon { font-size: 14px; line-height: 1; }
+.pull-icon { display: flex; align-items: center; }
 .pull-text { user-select: none; }
 .refresh-indicator {
   display: flex;
@@ -268,15 +274,16 @@ const goToDetail = (id) => router.push(`/article/${id}`)
   padding: 100px 20px;
   text-align: center;
 }
-.empty-icon { font-size: 56px; margin-bottom: 16px; }
+.empty-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 16px; }
 .empty-text { font-size: 16px; font-weight: 600; color: var(--color-text-body); margin: 0 0 6px 0; }
 .empty-hint { font-size: 14px; color: var(--color-text-tertiary); margin: 0 0 20px 0; }
 .browse-btn {
   background: var(--color-primary);
   color: #fff;
   border: none;
-  padding: 10px 28px;
-  border-radius: 8px;
+  height: 44px;
+  padding: 0 28px;
+  border-radius: var(--radius-btn);
   font-size: 14px;
   cursor: pointer;
 }
@@ -286,7 +293,7 @@ const goToDetail = (id) => router.push(`/article/${id}`)
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   max-width: 720px;
   margin-left: auto;
   margin-right: auto;
@@ -295,9 +302,9 @@ const goToDetail = (id) => router.push(`/article/${id}`)
 }
 .article-card {
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border);
   cursor: pointer;
   transition: all 0.15s;
@@ -314,7 +321,7 @@ const goToDetail = (id) => router.push(`/article/${id}`)
   color: var(--color-primary);
   background: var(--color-primary-light);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-tag);
   font-weight: 500;
 }
 .article-date { font-size: 12px; color: var(--color-text-tertiary); }
@@ -342,5 +349,6 @@ const goToDetail = (id) => router.push(`/article/${id}`)
   align-items: center;
 }
 .author { font-size: 12px; color: var(--color-text-tertiary); }
-.stats { display: flex; gap: 12px; font-size: 12px; color: var(--color-text-tertiary); }
+.stats { display: flex; gap: 12px; color: var(--color-text-tertiary); }
+.stats span { display: flex; align-items: center; gap: 4px; font-size: 12px; }
 </style>

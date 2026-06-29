@@ -6,6 +6,8 @@ import { getCategoryTags, addCategoryTag, deleteCategoryTag } from '../api/tenan
 import { getSearchHistory, addSearchHistory, clearSearchHistory } from '../api/searchHistory.js'
 import { searchArticles } from '../api/search.js'
 import { currentIsAdmin } from '../store/user.js'
+import { PhArrowLeft, PhPlus, PhWarning, PhCheck, PhNotePencil, PhClock, PhMagnifyingGlass, PhCaretUp, PhCaretDown, PhHeart, PhChatCircle, PhEye } from '@phosphor-icons/vue'
+import { formatDateTime } from '../utils/date.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -334,7 +336,7 @@ onUnmounted(() => {
       <!-- 0. 搜索结果时：返回按钮（位于筛选标签上方最左边） -->
       <div v-if="hasSearched" class="search-back-row">
         <span class="search-back-btn" role="button" tabindex="0" @click="backToSearch" @keydown.enter.prevent="backToSearch" @keydown.space.prevent="backToSearch">
-          <span class="back-icon">⬅</span>
+          <span class="back-icon"><PhArrowLeft :size="18" /></span>
           <span class="back-text">返回</span>
         </span>
       </div>
@@ -376,15 +378,16 @@ onUnmounted(() => {
             aria-label="新标签名称"
             @keyup="onAddTagKeyup"
           />
-          <span class="add-tag-btn" role="button" tabindex="0" aria-label="添加标签" @click="addTag" @keydown.enter.prevent="addTag" @keydown.space.prevent="addTag">➕</span>
+          <span class="add-tag-btn" role="button" tabindex="0" aria-label="添加标签" @click="addTag" @keydown.enter.prevent="addTag" @keydown.space.prevent="addTag"><PhPlus :size="16" /></span>
         </span>
 
         <!-- emoji 警告提示 -->
-        <span v-if="isEditMode && tagEmojiWarning" class="emoji-warning" role="alert">⚠️ 标签不支持表情符号</span>
+        <span v-if="isEditMode && tagEmojiWarning" class="emoji-warning" role="alert"><PhWarning :size="12" /> 标签不支持表情符号</span>
 
         <!-- 标签管理入口（仅管理员及以上可见，置于标签栏右上方） -->
         <span v-if="currentIsAdmin()" class="tag-admin-btn" role="button" tabindex="0" :aria-label="isEditMode ? '完成编辑' : '编辑标签'" @click="toggleEditMode" @keydown.enter.prevent="toggleEditMode" @keydown.space.prevent="toggleEditMode">
-          {{ isEditMode ? '✔️ 完成' : '✏️' }}
+          <template v-if="isEditMode"><PhCheck :size="13" /> 完成</template>
+          <template v-else><PhNotePencil :size="13" /></template>
         </span>
       </div>
 
@@ -443,7 +446,7 @@ onUnmounted(() => {
             @keydown.enter.prevent="tapHistoryItem(term)"
             @keydown.space.prevent="tapHistoryItem(term)"
           >
-            <span class="history-icon">🕐</span>
+            <span class="history-icon"><PhClock :size="14" /></span>
             <span class="history-text">{{ term }}</span>
           </div>
         </div>
@@ -483,7 +486,7 @@ onUnmounted(() => {
 
       <!-- 无结果 -->
       <div v-else-if="!searching && sortedResults.length === 0" class="empty-state" role="status">
-        <span class="empty-icon">🔍</span>
+        <span class="empty-icon"><PhMagnifyingGlass :size="48" /></span>
         <p class="empty-text">未找到相关经验文章</p>
         <p class="empty-hint">试试更换关键词，或减少筛选条件</p>
       </div>
@@ -502,7 +505,7 @@ onUnmounted(() => {
           class="pull-hint"
           :style="{ height: pullDistance + 'px', opacity: Math.min(pullDistance / PULL_THRESHOLD, 1) }"
         >
-          <span class="pull-icon">{{ pullDistance >= PULL_THRESHOLD ? '⬆️' : '⬇️' }}</span>
+          <span class="pull-icon"><PhCaretUp v-if="pullDistance >= PULL_THRESHOLD" :size="14" /><PhCaretDown v-else :size="14" /></span>
           <span class="pull-text">{{ pullDistance >= PULL_THRESHOLD ? '释放刷新' : '下拉刷新' }}</span>
         </div>
         <article
@@ -517,15 +520,15 @@ onUnmounted(() => {
         >
           <div class="result-header">
             <span class="result-type">{{ article.type }}</span>
-            <span class="result-date">{{ article.date }}</span>
+            <span class="result-date">{{ formatDateTime(article.date) }}</span>
           </div>
           <h3 class="result-title" v-html="highlight(article.title)"></h3>
           <p class="result-desc" v-html="highlight(article.desc)"></p>
           <div class="result-meta">
             <span>{{ article.author }}</span>
-            <span>👁️ {{ article.views }}</span>
-            <span>❤️ {{ article.likes }}</span>
-            <span>💬 {{ article.comments }}</span>
+            <span><PhEye :size="20" /> {{ article.views }}</span>
+            <span><PhHeart :size="12" /> {{ article.likes }}</span>
+            <span><PhChatCircle :size="12" /> {{ article.comments }}</span>
           </div>
         </article>
       </div>
@@ -533,7 +536,7 @@ onUnmounted(() => {
 
     <!-- 5. 悬浮发布按钮（与首页同位置） -->
     <div class="fab-button" role="button" tabindex="0" aria-label="发布经验" @click="router.push('/publish')" @keydown.enter.prevent="router.push('/publish')" @keydown.space.prevent="router.push('/publish')">
-      <span class="fab-icon">✏️</span>
+      <span class="fab-icon"><PhNotePencil :size="18" /></span>
       <span class="fab-text">发布经验</span>
     </div>
 
@@ -568,7 +571,6 @@ onUnmounted(() => {
   background: var(--color-bg-card);
   border-radius: 12px;
   padding: 6px 6px 6px 16px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
   border: 1px solid var(--color-border);
   width: 100%;
   box-sizing: border-box;
@@ -578,7 +580,7 @@ onUnmounted(() => {
 }
 .search-input::placeholder { color: var(--color-text-tertiary); }
 .search-btn {
-  background: var(--color-primary); color: white; border: none; border-radius: 8px; padding: 8px 20px; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0;
+  background: var(--color-primary); color: white; border: none; border-radius: var(--radius-btn); height: 44px; padding: 0 20px; font-size: 15px; font-weight: 500; cursor: pointer; flex-shrink: 0;
 }
 
 /* --- 排序栏（搜索栏下方最右侧） --- */
@@ -598,8 +600,8 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
-  padding: 5px 14px;
+  border-radius: var(--radius-full);
+  padding: 4px 14px;
   cursor: pointer;
   user-select: none;
   transition: color 0.15s, border-color 0.15s;
@@ -615,8 +617,8 @@ onUnmounted(() => {
   min-width: 120px;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
   z-index: 120;
 }
@@ -659,10 +661,10 @@ onUnmounted(() => {
 .filter-item {
   position: relative;
   padding: 6px 16px;
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   font-size: 13px;
-  background: #f4f6f9;
-  color: #666;
+  background: #F1F5F9;
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: all 0.2s;
   flex-shrink: 0;
@@ -750,7 +752,7 @@ onUnmounted(() => {
   color: var(--color-error);
   background: var(--color-error-bg);
   padding: 4px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-btn);
   flex-shrink: 0;
   animation: fadeInOut 2.5s ease;
 }
@@ -767,7 +769,7 @@ onUnmounted(() => {
   color: var(--color-text-tertiary);
   cursor: pointer;
   user-select: none;
-  padding: 5px 10px;
+  padding: 4px 10px;
   border-radius: 14px;
   margin-left: auto;
   flex-shrink: 0;
@@ -789,9 +791,9 @@ onUnmounted(() => {
 }
 .history-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   padding: 20px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border);
   width: 100%;
   box-sizing: border-box;
@@ -814,7 +816,7 @@ onUnmounted(() => {
 .history-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 12px 0;
   cursor: pointer;
   user-select: none;
@@ -829,10 +831,10 @@ onUnmounted(() => {
   margin: 0 -8px;
   padding-left: 8px;
   padding-right: 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
 }
 .history-icon {
-  font-size: 14px;
+  display: flex;
   flex-shrink: 0;
   opacity: 0.5;
 }
@@ -848,7 +850,7 @@ onUnmounted(() => {
 /* 清空历史按钮（左下角） */
 .clear-history-btn {
   display: inline-block;
-  margin-top: 14px;
+  margin-top: 16px;
   padding: 6px 14px;
   font-size: 13px;
   color: var(--color-text-tertiary);
@@ -871,31 +873,25 @@ onUnmounted(() => {
   bottom: 90px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 12px 20px;
-  background: rgba(37, 99, 235, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  background: var(--color-primary);
   color: #fff;
-  border-radius: 28px;
+  border-radius: 50%;
   font-size: 15px;
   font-weight: 500;
-  box-shadow:
-    0 4px 16px rgba(37, 99, 235, 0.35),
-    0 1px 4px rgba(0, 0, 0, 0.08);
   cursor: pointer;
   user-select: none;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s;
   z-index: 50;
 }
 .fab-button:active {
   transform: scale(0.95);
-  box-shadow:
-    0 2px 8px rgba(37, 99, 235, 0.25),
-    0 1px 2px rgba(0, 0, 0, 0.06);
 }
-.fab-icon { font-size: 18px; line-height: 1; }
-.fab-text { white-space: nowrap; }
+.fab-icon { display: flex; align-items: center; }
+.fab-text { display: none; }
 
 /* --- 搜索结果返回按钮行（位于筛选标签上方最左边） --- */
 .search-back-row {
@@ -906,6 +902,7 @@ onUnmounted(() => {
 .search-back-btn {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   color: var(--color-primary);
   font-weight: 500;
   font-size: 14px;
@@ -913,9 +910,9 @@ onUnmounted(() => {
   user-select: none;
   padding: 4px 0;
 }
-.search-back-btn .back-icon {
-  font-size: 18px;
-  margin-right: 4px;
+.back-icon {
+  display: block;
+  flex-shrink: 0;
 }
 
 /* --- 搜索结果 --- */
@@ -927,7 +924,7 @@ onUnmounted(() => {
 .results-header {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 4px;
   margin-bottom: 12px;
 }
 .results-count {
@@ -952,7 +949,7 @@ onUnmounted(() => {
   padding: 60px 20px;
   text-align: center;
 }
-.empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 12px; }
 .empty-text { font-size: 15px; color: var(--color-text-secondary); margin: 0 0 6px 0; }
 .empty-hint { font-size: 13px; color: var(--color-text-tertiary); margin: 0; }
 
@@ -960,7 +957,7 @@ onUnmounted(() => {
 .result-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   max-width: 720px;
   margin-left: auto;
   margin-right: auto;
@@ -968,9 +965,9 @@ onUnmounted(() => {
 }
 .result-card {
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border);
   cursor: pointer;
   transition: all 0.15s;
@@ -1005,7 +1002,7 @@ onUnmounted(() => {
   background: var(--color-warning-bg);
   color: inherit;
   padding: 0 2px;
-  border-radius: 2px;
+  border-radius: var(--radius-tag);
 }
 .result-desc {
   font-size: 13px;
@@ -1021,24 +1018,29 @@ onUnmounted(() => {
   background: var(--color-warning-bg);
   color: inherit;
   padding: 0 2px;
-  border-radius: 2px;
+  border-radius: var(--radius-tag);
 }
 .result-meta {
   display: flex;
-  gap: 14px;
-  font-size: 12px;
-  color: var(--color-text-tertiary);
+  gap: 16px;
+  font-size: 14px;
+  color: #94A3B8;
+}
+.result-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* --- 骨架屏 --- */
 .skeleton-card {
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px;
   border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .skeleton-row {
   display: flex;
@@ -1082,13 +1084,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   overflow: hidden;
   transition: height 0.15s;
   color: var(--color-text-tertiary);
   font-size: 13px;
 }
-.pull-icon { font-size: 14px; line-height: 1; }
+.pull-icon { display: flex; align-items: center; }
 .pull-text { user-select: none; }
 .refresh-indicator {
   display: flex;

@@ -3,6 +3,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { PhCheck, PhX } from '@phosphor-icons/vue'
 
 const visible = ref(false)
 const message = ref('')
@@ -37,7 +38,8 @@ defineExpose({ showToast })
         role="alert"
         aria-live="assertive"
       >
-        <span class="toast-icon" aria-hidden="true">{{ type === 'success' ? '✓' : '✕' }}</span>
+        <PhCheck v-if="type === 'success'" :size="16" class="toast-icon" aria-hidden="true" />
+        <PhX v-else :size="16" class="toast-icon" aria-hidden="true" />
         <span class="toast-text">{{ message }}</span>
       </div>
     </Transition>
@@ -70,9 +72,8 @@ defineExpose({ showToast })
   color: #fff;
 }
 .toast-icon {
-  font-size: 16px;
-  font-weight: bold;
   flex-shrink: 0;
+  display: block;
 }
 .toast-text {
   white-space: nowrap;

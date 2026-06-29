@@ -3,6 +3,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { PhArrowLeft, PhUsers, PhTag, PhClipboardText, PhUser, PhGear, PhNotePencil, PhHeart, PhEye, PhFolder, PhClock, PhPackage } from '@phosphor-icons/vue'
 import { userStore } from '../store/user.js'
 import { currentIsSuperAdmin, currentIsAdmin } from '../store/user.js'
 import { ROLE_LABELS } from '../store/auth.js'
@@ -36,12 +37,12 @@ const SECTION_LABELS = {
 }
 
 const SECTION_ICONS = {
-  myPosts: '📝',
-  totalLikes: '❤️',
-  totalViews: '👁️',
-  collections: '📁',
-  history: '🕒',
-  delisted: '📦',
+  myPosts:     PhNotePencil,
+  totalLikes:  PhHeart,
+  totalViews:  PhEye,
+  collections: PhFolder,
+  history:     PhClock,
+  delisted:    PhPackage,
 }
 
 const loadVisibility = async () => {
@@ -74,14 +75,14 @@ const adminMenus = computed(() => {
     {
       label: '用户管理',
       sub: '创建、禁用、删除用户账号',
-      icon: '👥',
+      icon: PhUsers,
       path: '/admin/users',
       show: currentIsAdmin(),
     },
     {
       label: '标签管理',
       sub: '分类标签的增删改',
-      icon: '🏷️',
+      icon: PhTag,
       path: '/search',
       query: { admin: '1' },
       show: currentIsAdmin(),
@@ -89,21 +90,21 @@ const adminMenus = computed(() => {
     {
       label: '操作日志',
       sub: '查看管理员敏感操作记录',
-      icon: '📋',
+      icon: PhClipboardText,
       path: '/admin/operation-logs',
       show: currentIsAdmin(),
     },
     {
       label: '个人页面管理',
       sub: '管理一线工程师个人页面的模块可见性',
-      icon: '👤',
+      icon: PhUser,
       action: 'toggleVisibilityPanel',
       show: currentIsAdmin(),
     },
     {
       label: '系统配置',
       sub: '平台参数与部署设置',
-      icon: '⚙️',
+      icon: PhGear,
       path: '/admin/config',
       show: currentIsSuperAdmin(),
     },
@@ -131,14 +132,13 @@ onMounted(() => {
 
     <!-- 顶部导航 -->
     <header class="page-header">
-      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter="goBack" @keydown.space.prevent="goBack">← 返回</span>
+      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter="goBack" @keydown.space.prevent="goBack"><PhArrowLeft :size="18" class="back-icon" /> 返回</span>
       <span class="title">管理中心</span>
       <span class="role-tag">{{ roleLabel }}</span>
     </header>
 
     <!-- 欢迎横幅 -->
     <div class="welcome-banner">
-      <span class="welcome-icon">🛡️</span>
       <div class="welcome-text">
         <p class="welcome-greet">你好，{{ userStore.name }}</p>
         <p class="welcome-hint">当前身份：{{ roleLabel }}，可进行以下管理操作</p>
@@ -158,7 +158,7 @@ onMounted(() => {
         @keydown.space.prevent="handleMenuClick(menu)"
       >
         <div class="menu-left">
-          <span class="menu-icon-box">{{ menu.icon }}</span>
+          <span class="menu-icon-box"><component :is="menu.icon" :size="22" /></span>
           <div class="menu-info">
             <span class="menu-label">{{ menu.label }}</span>
             <span class="menu-sub">{{ menu.sub }}</span>
@@ -181,7 +181,7 @@ onMounted(() => {
           class="visibility-item"
         >
           <div class="visibility-item-left">
-            <span class="visibility-icon">{{ SECTION_ICONS[key] }}</span>
+            <span class="visibility-icon"><component :is="SECTION_ICONS[key]" :size="18" /></span>
             <span class="visibility-label">{{ label }}</span>
           </div>
           <button
@@ -212,7 +212,7 @@ onMounted(() => {
 /* --- 顶部导航 --- */
 .page-header {
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 16px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -226,7 +226,11 @@ onMounted(() => {
   color: var(--color-primary);
   font-weight: 500;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
+.back-icon { display: block; flex-shrink: 0; }
 .title {
   font-size: 16px;
   font-weight: 600;
@@ -234,10 +238,10 @@ onMounted(() => {
 }
 .role-tag {
   font-size: 11px;
-  color: #fff;
-  background: #7c3aed;
-  padding: 3px 10px;
-  border-radius: 12px;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  padding: 4px 12px;
+  border-radius: var(--radius-tag);
   font-weight: 500;
 }
 
@@ -245,18 +249,15 @@ onMounted(() => {
 .welcome-banner {
   margin: 16px;
   padding: 16px;
-  background: linear-gradient(135deg, #ede9fe 0%, #e0e7ff 100%);
-  border-radius: 12px;
+  background: var(--color-bg-card);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-card);
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   max-width: 720px;
   margin-left: auto;
   margin-right: auto;
-}
-.welcome-icon {
-  font-size: 32px;
-  flex-shrink: 0;
 }
 .welcome-greet {
   font-size: 15px;
@@ -275,19 +276,19 @@ onMounted(() => {
   margin: 0 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   max-width: 720px;
   margin-left: auto;
   margin-right: auto;
 }
 .menu-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   padding: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -298,22 +299,22 @@ onMounted(() => {
 .menu-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
 }
 .menu-icon-box {
   width: 44px; height: 44px;
-  border-radius: 12px;
-  background: #ede9fe;
+  border-radius: var(--radius-card);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 22px;
   flex-shrink: 0;
 }
 .menu-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .menu-label {
   font-size: 15px;
@@ -333,9 +334,9 @@ onMounted(() => {
 .visibility-panel {
   margin: 0 16px 40px 16px;
   background: var(--color-bg-card);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   padding: 20px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   max-width: 720px;
   margin-left: auto;
   margin-right: auto;
@@ -372,12 +373,12 @@ onMounted(() => {
 .visibility-item-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 .visibility-icon {
-  font-size: 18px;
-  width: 24px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
 }
 .visibility-label {
   font-size: 14px;
@@ -389,16 +390,16 @@ onMounted(() => {
 .visibility-toggle {
   position: relative;
   width: 48px;
-  height: 26px;
-  border-radius: 13px;
+  height: 28px;
+  border-radius: 14px;
   border: none;
-  background: #d1d5db;
+  background: #CBD5E1;
   cursor: pointer;
   transition: background 0.2s;
   flex-shrink: 0;
 }
 .visibility-toggle.on {
-  background: var(--color-primary);
+  background: #2563EB;
 }
 .visibility-toggle:disabled {
   opacity: 0.5;

@@ -73,7 +73,7 @@ export default async function articleRoutes(fastify) {
   fastify.get('/articles/:id', { preHandler: optionalAuth }, async (request, reply) => {
     const id = parseInt(request.params.id, 10)
     const row = queryOne(
-      `SELECT a.*, u.id AS author_id, u.department, u.desc AS author_desc
+      `SELECT a.*, u.id AS author_id, u.department, u.desc AS author_desc, u.avatar AS author_avatar
        FROM articles a
        LEFT JOIN users u ON a.author = u.name
        WHERE a.id = ?`,
@@ -605,6 +605,7 @@ function formatArticle(row, likedIds) {
     authorId: row.author_id || null,
     department: row.department || '',
     authorDesc: row.author_desc || '',
+    authorAvatar: row.author_avatar || '',
     date: row.date,
     likes: row.likes,
     isLiked: likedIds ? likedIds.has(row.id) : false,

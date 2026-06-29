@@ -6,6 +6,8 @@ import { getCategoryTags, addCategoryTag, deleteCategoryTag } from '../api/tenan
 import { searchArticles } from '../api/search.js'
 import { likeArticle } from '../api/article.js'
 import { isCollected, toggleCollect as toggleCollectStore, currentIsAdmin } from '../store/user.js'
+import { PhHeart, PhChatCircle, PhStar, PhPlus, PhWarning, PhCheck, PhNotePencil, PhCaretUp, PhCaretDown, PhEye } from '@phosphor-icons/vue'
+import { formatDateTime } from '../utils/date.js'
 
 const router = useRouter()
 
@@ -266,15 +268,16 @@ const onPullEnd = async () => {
           aria-label="新标签名称"
           @keyup="onAddTagKeyup"
         />
-        <span class="add-tag-btn" role="button" tabindex="0" aria-label="添加标签" @click="addTag" @keydown.enter.prevent="addTag" @keydown.space.prevent="addTag">➕</span>
+        <span class="add-tag-btn" role="button" tabindex="0" aria-label="添加标签" @click="addTag" @keydown.enter.prevent="addTag" @keydown.space.prevent="addTag"><PhPlus :size="16" /></span>
       </span>
 
       <!-- emoji 警告提示 -->
-      <span v-if="isEditMode && tagEmojiWarning" class="emoji-warning" role="alert">⚠️ 标签不支持表情符号</span>
+      <span v-if="isEditMode && tagEmojiWarning" class="emoji-warning" role="alert"><PhWarning :size="12" /> 标签不支持表情符号</span>
 
       <!-- 标签管理入口（仅管理员及以上可见） -->
       <span v-if="currentIsAdmin()" class="tag-admin-btn" role="button" tabindex="0" :aria-label="isEditMode ? '完成编辑' : '编辑标签'" @click="toggleEditMode" @keydown.enter.prevent="toggleEditMode" @keydown.space.prevent="toggleEditMode">
-        {{ isEditMode ? '✔️ 完成' : '✏️' }}
+        <template v-if="isEditMode"><PhCheck :size="13" /> 完成</template>
+        <template v-else><PhNotePencil :size="13" /></template>
       </span>
     </div>
 
@@ -314,7 +317,7 @@ const onPullEnd = async () => {
         class="pull-hint"
         :style="{ height: pullDistance + 'px', opacity: Math.min(pullDistance / PULL_THRESHOLD, 1) }"
       >
-        <span class="pull-icon">{{ pullDistance >= PULL_THRESHOLD ? '⬆️' : '⬇️' }}</span>
+        <span class="pull-icon"><PhCaretUp v-if="pullDistance >= PULL_THRESHOLD" :size="14" /><PhCaretDown v-else :size="14" /></span>
         <span class="pull-text">{{ pullDistance >= PULL_THRESHOLD ? '释放刷新' : '下拉刷新' }}</span>
       </div>
       <article
@@ -330,7 +333,7 @@ const onPullEnd = async () => {
         <div class="card-header">
           <div class="card-top-row">
             <span class="device-tag">{{ post.type }}</span>
-            <span class="views-badge">👁️ {{ post.views }}</span>
+            <span class="views-badge"><PhEye :size="20" /> {{ post.views }}</span>
           </div>
           <h3 class="post-title">{{ post.title }}</h3>
         </div>
@@ -340,19 +343,19 @@ const onPullEnd = async () => {
         <div class="card-footer">
           <div class="author-info">
             <span class="author-name">{{ post.author }}</span>
-            <span class="post-date"> · {{ post.date }}</span>
+            <span class="post-date"> · {{ formatDateTime(post.date) }}</span>
           </div>
           <div class="interaction-bar">
             <span class="action-btn" role="button" tabindex="0" :aria-label="post.isLiked ? '取消点赞' : '点赞'" @click="toggleLike(post.id, $event)" @keydown.enter.prevent="toggleLike(post.id, $event)" @keydown.space.prevent="toggleLike(post.id, $event)">
-              <span class="icon">{{ post.isLiked ? '❤️' : '🤍' }}</span>
+              <span class="icon" :class="{ liked: post.isLiked }"><PhHeart :size="15" /></span>
               <span class="count">{{ post.likes }}</span>
             </span>
             <span class="action-btn">
-              <span class="icon">💬</span>
+              <span class="icon"><PhChatCircle :size="15" /></span>
               <span class="count">{{ post.comments }}</span>
             </span>
             <span class="action-btn" role="button" tabindex="0" :aria-label="post.isCollected ? '取消收藏' : '收藏'" @click="toggleCollect(post.id, $event)" @keydown.enter.prevent="toggleCollect(post.id, $event)" @keydown.space.prevent="toggleCollect(post.id, $event)">
-              <span class="icon">{{ post.isCollected ? '⭐' : '☆' }}</span>
+              <span class="icon" :class="{ collected: post.isCollected }"><PhStar :size="15" /></span>
             </span>
           </div>
         </div>
@@ -361,7 +364,7 @@ const onPullEnd = async () => {
 
     <!-- 5. 悬浮发布按钮 -->
     <div class="fab-button" role="button" tabindex="0" aria-label="发布经验" @click="goToPublish" @keydown.enter.prevent="goToPublish" @keydown.space.prevent="goToPublish">
-      <span class="fab-icon">✏️</span>
+      <span class="fab-icon"><PhNotePencil :size="18" /></span>
       <span class="fab-text">发布经验</span>
     </div>
 
@@ -386,7 +389,6 @@ const onPullEnd = async () => {
   background: var(--color-bg-card);
   border-radius: 12px;
   padding: 6px 6px 6px 16px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
   border: 1px solid var(--color-border);
   width: 100%;
   max-width: 500px;
@@ -405,8 +407,8 @@ const onPullEnd = async () => {
   background: var(--color-primary);
   color: white;
   border: none;
-  border-radius: 8px;
-  padding: 8px 20px;
+  border-radius: var(--radius-btn);
+  height: 44px; padding: 0 20px;
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
@@ -431,11 +433,11 @@ const onPullEnd = async () => {
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   font-size: 13px;
-  background-color: var(--color-bg-card);
+  background-color: #F1F5F9;
   color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
+  border: none;
   cursor: pointer;
   transition: all 0.2s;
   flex-shrink: 0;
@@ -536,7 +538,7 @@ const onPullEnd = async () => {
   color: var(--color-text-tertiary);
   cursor: pointer;
   user-select: none;
-  padding: 5px 10px;
+  padding: 4px 10px;
   border-radius: 14px;
   margin-left: auto;
   flex-shrink: 0;
@@ -550,13 +552,13 @@ const onPullEnd = async () => {
 .article-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 14px;
+  gap: 16px;
 }
 .post-card {
   background: var(--color-bg-card);
   border-radius: 12px;
   padding: 16px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border);
   cursor: pointer;
   transition: all 0.2s;
@@ -579,8 +581,11 @@ const onPullEnd = async () => {
   border-radius: 4px;
 }
 .views-badge {
-  font-size: 11px;
-  color: var(--color-text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  color: #94A3B8;
   flex-shrink: 0;
 }
 .post-title {
@@ -626,38 +631,34 @@ const onPullEnd = async () => {
   user-select: none;
 }
 .action-btn:active { color: var(--color-primary); }
-.action-btn .icon { font-size: 15px; }
+.action-btn .icon { display: flex; align-items: center; color: var(--color-text-tertiary); }
+.action-btn .icon.liked { color: var(--color-error); }
+.action-btn .icon.collected { color: var(--color-warning); }
 .fab-button {
   position: fixed;
   right: 20px;
   bottom: 90px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 12px 20px;
-  background: rgba(37, 99, 235, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  background: var(--color-primary);
   color: #fff;
-  border-radius: 28px;
+  border-radius: 50%;
   font-size: 15px;
   font-weight: 500;
-  box-shadow:
-    0 4px 16px rgba(37, 99, 235, 0.35),
-    0 1px 4px rgba(0, 0, 0, 0.08);
   cursor: pointer;
   user-select: none;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s;
   z-index: 50;
 }
 .fab-button:active {
   transform: scale(0.95);
-  box-shadow:
-    0 2px 8px rgba(37, 99, 235, 0.25),
-    0 1px 2px rgba(0, 0, 0, 0.06);
 }
-.fab-icon { font-size: 18px; line-height: 1; }
-.fab-text { white-space: nowrap; }
+.fab-icon { display: flex; align-items: center; }
+.fab-text { display: none; }
 @media (min-width: 768px) { .article-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1024px) { .article-grid { grid-template-columns: repeat(3, 1fr); } }
 
@@ -669,7 +670,7 @@ const onPullEnd = async () => {
   border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .skeleton-row {
   display: flex;
@@ -713,14 +714,14 @@ const onPullEnd = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   overflow: hidden;
   transition: height 0.15s;
   color: var(--color-text-tertiary);
   font-size: 13px;
   grid-column: 1 / -1;
 }
-.pull-icon { font-size: 14px; line-height: 1; }
+.pull-icon { display: flex; align-items: center; }
 .pull-text { user-select: none; }
 .refresh-indicator {
   display: flex;

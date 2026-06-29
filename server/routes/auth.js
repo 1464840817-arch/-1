@@ -45,7 +45,7 @@ export default async function authRoutes(fastify) {
     }
 
     const user = queryOne(
-      'SELECT id, account, password, name, role, disabled FROM users WHERE account = ?',
+      'SELECT id, account, password, name, role, avatar, disabled FROM users WHERE account = ?',
       [account],
     )
 
@@ -70,6 +70,7 @@ export default async function authRoutes(fastify) {
       name: user.name,
       role: user.role,
       account: user.account,
+      avatar: user.avatar || '',
     }
   })
 

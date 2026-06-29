@@ -3,6 +3,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
+import { PhArrowLeft, PhShieldCheck, PhPlus, PhUsers, PhX, PhMagnifyingGlass, PhBell, PhDotsThree } from '@phosphor-icons/vue'
 import { friendStore, initFriendData, loadFriendRequests, isFriend, addToFriends, acceptFriendRequest, declineFriendRequest, removeFromFriends } from '../store/friends.js'
 import { getAdminList, searchUsers } from '../api/friend.js'
 
@@ -195,7 +196,7 @@ const cancelDelete = () => {
 
     <!-- ==================== 顶部导航 ==================== -->
     <header class="page-header">
-      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter.prevent="goBack" @keydown.space.prevent="goBack">← 返回</span>
+      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter.prevent="goBack" @keydown.space.prevent="goBack"><PhArrowLeft :size="18" class="back-icon" /> 返回</span>
       <span class="title">{{ viewTitle }}</span>
       <div ref="dotsRef" class="dots-menu-wrapper">
         <button
@@ -210,15 +211,15 @@ const cancelDelete = () => {
         </button>
         <div v-if="showDotsMenu" class="dots-dropdown">
           <button class="dropdown-item" @click="openPopup('admin')">
-            <span class="dropdown-icon">🛡️</span>
+            <span class="dropdown-icon"><PhShieldCheck :size="15" /></span>
             <span>管理员管理</span>
           </button>
           <button class="dropdown-item" @click="openPopup('add')">
-            <span class="dropdown-icon">➕</span>
+            <span class="dropdown-icon"><PhPlus :size="15" /></span>
             <span>添加好友</span>
           </button>
           <button class="dropdown-item" @click="openPopup('remove')">
-            <span class="dropdown-icon">👥</span>
+            <span class="dropdown-icon"><PhUsers :size="15" /></span>
             <span>删除好友</span>
           </button>
         </div>
@@ -233,7 +234,7 @@ const cancelDelete = () => {
       <!-- ==================== 待处理好友请求 ==================== -->
       <div v-if="friendStore.requests.length > 0" class="requests-section">
         <div class="section-header">
-          <span class="section-title">🔴 新的朋友</span>
+          <span class="section-title">新的朋友</span>
           <span class="section-count">{{ friendStore.requests.length }} 条待处理</span>
         </div>
         <div class="requests-list">
@@ -248,7 +249,8 @@ const cancelDelete = () => {
             @keydown.space.prevent="goToUser(req.senderId)"
           >
             <div class="user-avatar" :class="{ online: req.isOnline }">
-              {{ req.sender[0] }}
+              <img v-if="req.avatar" :src="req.avatar" class="user-avatar-img" alt="" />
+              <span v-else class="user-avatar-text">{{ req.sender[0] }}</span>
               <span v-if="req.isOnline" class="online-dot"></span>
             </div>
             <div class="user-info">
@@ -277,7 +279,7 @@ const cancelDelete = () => {
 
       <!-- ==================== 空状态 ==================== -->
       <div v-if="friendStore.list.length === 0 && friendStore.requests.length === 0" class="empty-full">
-        <span class="empty-full-icon">👥</span>
+        <span class="empty-full-icon"><PhUsers :size="56" /></span>
         <p class="empty-full-text">暂无好友</p>
         <p class="empty-full-hint">可通过右上角菜单添加好友</p>
       </div>
@@ -299,7 +301,8 @@ const cancelDelete = () => {
           @keydown.space.prevent="goToUser(friend.id)"
         >
           <div class="user-avatar" :class="{ online: friend.isOnline }">
-            {{ friend.name[0] }}
+            <img v-if="friend.avatar" :src="friend.avatar" class="user-avatar-img" alt="" />
+            <span v-else class="user-avatar-text">{{ friend.name[0] }}</span>
             <span v-if="friend.isOnline" class="online-dot"></span>
           </div>
           <div class="user-info">
@@ -327,7 +330,7 @@ const cancelDelete = () => {
           <div class="popup-panel">
             <header class="popup-header">
               <span class="popup-title">管理员管理</span>
-              <button class="popup-close" @click="closePopup" aria-label="关闭">✕</button>
+              <button class="popup-close" @click="closePopup" aria-label="关闭"><PhX :size="18" /></button>
             </header>
 
             <div v-if="adminsLoading" class="loading-state">
@@ -347,7 +350,8 @@ const cancelDelete = () => {
                 @keydown.space.prevent="contactAdmin(admin)"
               >
                 <div class="user-avatar" :class="{ online: admin.isOnline }">
-                  {{ admin.name[0] }}
+                  <img v-if="admin.avatar" :src="admin.avatar" class="user-avatar-img" alt="" />
+                  <span v-else class="user-avatar-text">{{ admin.name[0] }}</span>
                   <span v-if="admin.isOnline" class="online-dot"></span>
                 </div>
                 <div class="user-info">
@@ -375,13 +379,13 @@ const cancelDelete = () => {
           <div class="popup-panel">
             <header class="popup-header">
               <span class="popup-title">添加好友</span>
-              <button class="popup-close" @click="closePopup" aria-label="关闭">✕</button>
+              <button class="popup-close" @click="closePopup" aria-label="关闭"><PhX :size="18" /></button>
             </header>
 
             <div class="popup-body">
               <div class="search-bar">
                 <div class="search-input-wrap">
-                  <span class="search-icon">🔍</span>
+                  <span class="search-icon"><PhMagnifyingGlass :size="14" /></span>
                   <input
                     v-model="searchKeyword"
                     type="text"
@@ -399,7 +403,7 @@ const cancelDelete = () => {
                     @click="searchKeyword = ''; searchResults = []; hasSearched = false"
                     @keydown.enter.prevent="searchKeyword = ''; searchResults = []; hasSearched = false"
                     @keydown.space.prevent="searchKeyword = ''; searchResults = []; hasSearched = false"
-                  >✕</span>
+                  ><PhX :size="14" /></span>
                 </div>
                 <button class="search-btn" :disabled="!searchKeyword.trim() || searching" @click="handleSearch">
                   {{ searching ? '搜索中' : '搜索' }}
@@ -413,7 +417,7 @@ const cancelDelete = () => {
                 </div>
 
                 <div v-else-if="searchResults.length === 0" class="empty-inline">
-                  <span class="empty-inline-icon">🔍</span>
+                  <span class="empty-inline-icon"><PhMagnifyingGlass :size="40" /></span>
                   <p class="empty-inline-text">未找到匹配的用户</p>
                   <p class="empty-inline-hint">试试换一个关键词</p>
                 </div>
@@ -424,7 +428,8 @@ const cancelDelete = () => {
                   class="user-card"
                 >
                   <div class="user-avatar" :class="{ online: user.isOnline }">
-                    {{ user.name[0] }}
+                    <img v-if="user.avatar" :src="user.avatar" class="user-avatar-img" alt="" />
+                    <span v-else class="user-avatar-text">{{ user.name[0] }}</span>
                     <span v-if="user.isOnline" class="online-dot"></span>
                   </div>
                   <div class="user-info">
@@ -451,7 +456,7 @@ const cancelDelete = () => {
               </div>
 
               <div v-else class="search-guide">
-                <span class="guide-icon">👥</span>
+                <span class="guide-icon"><PhUsers :size="52" /></span>
                 <p class="guide-text">输入同事的工号、姓名或部门</p>
                 <p class="guide-hint">找到后点击"添加"即可发送好友请求</p>
               </div>
@@ -470,12 +475,12 @@ const cancelDelete = () => {
           <div class="popup-panel">
             <header class="popup-header">
               <span class="popup-title">删除好友</span>
-              <button class="popup-close" @click="closePopup" aria-label="关闭">✕</button>
+              <button class="popup-close" @click="closePopup" aria-label="关闭"><PhX :size="18" /></button>
             </header>
 
             <div class="popup-body">
               <div v-if="friendStore.list.length === 0" class="empty-full">
-                <span class="empty-full-icon">👥</span>
+                <span class="empty-full-icon"><PhUsers :size="56" /></span>
                 <p class="empty-full-text">暂无好友</p>
                 <p class="empty-full-hint">去"添加好友"里搜索并添加同事吧</p>
               </div>
@@ -497,7 +502,8 @@ const cancelDelete = () => {
                   :class="{ 'confirm-delete': deleteConfirmId === friend.id }"
                 >
                   <div class="user-avatar" :class="{ online: friend.isOnline }">
-                    {{ friend.name[0] }}
+                    <img v-if="friend.avatar" :src="friend.avatar" class="user-avatar-img" alt="" />
+                    <span v-else class="user-avatar-text">{{ friend.name[0] }}</span>
                     <span v-if="friend.isOnline" class="online-dot"></span>
                   </div>
                   <div class="user-info">
@@ -540,7 +546,7 @@ const cancelDelete = () => {
 /* ==================== 顶部导航 ==================== */
 .page-header {
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 16px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -554,6 +560,13 @@ const cancelDelete = () => {
   color: var(--color-primary);
   font-weight: 500;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.back-icon {
+  display: block;
+  flex-shrink: 0;
 }
 .title {
   font-size: 16px;
@@ -573,7 +586,7 @@ const cancelDelete = () => {
   border: none;
   background: transparent;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   transition: background 0.15s;
 }
 .dots-menu-btn:hover,
@@ -595,7 +608,7 @@ const cancelDelete = () => {
   margin-top: 4px;
   min-width: 150px;
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   box-shadow: 0 4px 20px rgba(0,0,0,0.12);
   overflow: hidden;
   z-index: 300;
@@ -610,7 +623,7 @@ const cancelDelete = () => {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 11px 16px;
+  padding: 12px 16px;
   border: none;
   background: transparent;
   font-size: 14px;
@@ -625,7 +638,7 @@ const cancelDelete = () => {
   background: var(--color-bg-page);
 }
 .dropdown-icon {
-  font-size: 15px;
+  display: flex;
   flex-shrink: 0;
 }
 
@@ -663,12 +676,12 @@ const cancelDelete = () => {
 .request-card {
   background: var(--color-bg-card);
   border: 1px solid #FECACA;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px;
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  box-shadow: 0 1px 3px rgba(239,68,68,0.06);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -684,14 +697,14 @@ const cancelDelete = () => {
 .request-actions {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
 }
 .accept-btn {
   font-size: 12px;
   font-weight: 600;
   padding: 6px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   border: none;
   background: var(--color-primary);
   color: #fff;
@@ -706,7 +719,7 @@ const cancelDelete = () => {
   font-size: 12px;
   font-weight: 500;
   padding: 6px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   border: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text-tertiary);
@@ -726,7 +739,7 @@ const cancelDelete = () => {
   position: fixed;
   inset: 0;
   z-index: 400;
-  background: rgba(0,0,0,0.4);
+  background: rgba(15,23,42,0.5);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -738,7 +751,7 @@ const cancelDelete = () => {
   display: flex;
   flex-direction: column;
   background: var(--color-bg-card);
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 .popup-header {
@@ -762,6 +775,9 @@ const cancelDelete = () => {
   color: var(--color-text-tertiary);
   padding: 4px 8px;
   border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .popup-body {
   overflow-y: auto;
@@ -794,7 +810,7 @@ const cancelDelete = () => {
 .search-bar {
   padding: 16px;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -803,13 +819,13 @@ const cancelDelete = () => {
   display: flex;
   align-items: center;
   background: var(--color-bg-page);
-  border-radius: 10px;
+  border-radius: var(--radius-btn);
   padding: 0 12px;
   border: 1px solid var(--color-border);
   gap: 8px;
 }
 .search-icon {
-  font-size: 14px;
+  display: flex;
   flex-shrink: 0;
 }
 .search-input {
@@ -826,7 +842,7 @@ const cancelDelete = () => {
   color: var(--color-text-tertiary);
 }
 .search-clear {
-  font-size: 14px;
+  display: flex;
   color: var(--color-text-tertiary);
   cursor: pointer;
   padding: 4px;
@@ -835,7 +851,7 @@ const cancelDelete = () => {
   background: var(--color-primary);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-btn);
   padding: 0 18px;
   font-size: 14px;
   font-weight: 500;
@@ -856,7 +872,7 @@ const cancelDelete = () => {
   padding: 80px 20px;
   text-align: center;
 }
-.guide-icon { font-size: 52px; margin-bottom: 16px; }
+.guide-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 16px; }
 .guide-text { font-size: 15px; color: var(--color-text-secondary); margin: 0 0 6px 0; }
 .guide-hint { font-size: 13px; color: var(--color-text-tertiary); margin: 0; }
 
@@ -897,12 +913,12 @@ const cancelDelete = () => {
 /* 用户卡片 */
 .user-card {
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px;
   display: flex;
   align-items: center;
   gap: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border);
   transition: all 0.2s;
 }
@@ -915,7 +931,7 @@ const cancelDelete = () => {
 .user-avatar {
   width: 44px; height: 44px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary), #6366f1);
+  background: var(--color-primary);
   color: #fff;
   font-size: 18px;
   font-weight: 700;
@@ -924,6 +940,12 @@ const cancelDelete = () => {
   align-items: center;
   flex-shrink: 0;
   position: relative;
+  overflow: hidden;
+}
+.user-avatar-img {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 .online-dot {
   position: absolute;
@@ -940,7 +962,7 @@ const cancelDelete = () => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .user-name-line {
   display: flex;
@@ -957,7 +979,7 @@ const cancelDelete = () => {
   color: var(--color-primary);
   background: var(--color-primary-light);
   padding: 1px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-tag);
   font-weight: 500;
 }
 .user-meta {
@@ -976,7 +998,7 @@ const cancelDelete = () => {
   font-weight: 500;
   flex-shrink: 0;
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   background: var(--color-primary-light);
   cursor: pointer;
   transition: background 0.15s;
@@ -989,8 +1011,8 @@ const cancelDelete = () => {
 .chat-btn {
   font-size: 13px;
   font-weight: 500;
-  padding: 7px 14px;
-  border-radius: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-btn);
   border: 1px solid var(--color-primary);
   background: transparent;
   color: var(--color-primary);
@@ -1008,8 +1030,8 @@ const cancelDelete = () => {
 .add-btn {
   font-size: 13px;
   font-weight: 500;
-  padding: 7px 16px;
-  border-radius: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius-btn);
   border: 1px solid var(--color-primary);
   background: transparent;
   color: var(--color-primary);
@@ -1037,8 +1059,8 @@ const cancelDelete = () => {
 .delete-btn {
   font-size: 13px;
   font-weight: 500;
-  padding: 7px 16px;
-  border-radius: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius-btn);
   border: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text-tertiary);
@@ -1073,7 +1095,7 @@ const cancelDelete = () => {
   padding: 60px 20px;
   text-align: center;
 }
-.empty-inline-icon { font-size: 40px; margin-bottom: 10px; }
+.empty-inline-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 10px; }
 .empty-inline-text { font-size: 15px; color: var(--color-text-secondary); margin: 0 0 4px 0; }
 .empty-inline-hint { font-size: 13px; color: var(--color-text-tertiary); margin: 0; }
 
@@ -1084,15 +1106,16 @@ const cancelDelete = () => {
   padding: 100px 20px;
   text-align: center;
 }
-.empty-full-icon { font-size: 56px; margin-bottom: 16px; }
+.empty-full-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 16px; }
 .empty-full-text { font-size: 16px; font-weight: 600; color: var(--color-text-body); margin: 0 0 6px 0; }
 .empty-full-hint { font-size: 14px; color: var(--color-text-tertiary); margin: 0 0 20px 0; }
 .go-add-btn {
   background: var(--color-primary);
   color: #fff;
   border: none;
-  padding: 10px 28px;
-  border-radius: 8px;
+  padding: 0 28px;
+  border-radius: var(--radius-btn);
+  height: 44px;
   font-size: 14px;
   cursor: pointer;
   font-family: inherit;

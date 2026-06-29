@@ -6,6 +6,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { login } from '../api/auth.js'
 import { userStore, setLoginState } from '../store/user.js'
 import { SEED_SUPER_ADMIN, ROLES } from '../store/auth.js'
+import { PhWarning } from '@phosphor-icons/vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -83,6 +84,7 @@ const handleLogin = async () => {
         token: result.token,
         role: result.role || '',
         account: result.account || account.value.trim(),
+        avatar: result.avatar || '',
       })
       const redirect = route.query.redirect || '/search'
       router.push(redirect)
@@ -171,7 +173,7 @@ const handleKeyup = (e) => {
       <!-- 错误提示 -->
       <transition name="fade">
         <div v-if="errorMsg" class="error-banner" role="alert">
-          <span class="error-icon">⚠️</span>
+          <PhWarning :size="14" class="error-icon" />
           <span>{{ errorMsg }}</span>
         </div>
       </transition>
@@ -326,7 +328,7 @@ const handleKeyup = (e) => {
 .error-banner {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   background: var(--color-error-bg);
   color: var(--color-error);
   font-size: 13px;
@@ -334,7 +336,7 @@ const handleKeyup = (e) => {
   border-radius: 8px;
   margin-bottom: 12px;
 }
-.error-icon { font-size: 14px; flex-shrink: 0; }
+.error-icon { display: flex; flex-shrink: 0; }
 
 .fade-enter-active,
 .fade-leave-active { transition: opacity 0.25s ease; }
@@ -346,9 +348,9 @@ const handleKeyup = (e) => {
   display: flex;
   align-items: center;
   background: var(--color-divider);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 0 14px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   border: 1.5px solid transparent;
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
@@ -371,7 +373,7 @@ const handleKeyup = (e) => {
   outline: none;
   font-size: 15px;
   color: var(--color-text-primary);
-  padding: 14px 0;
+  padding: 16px 0;
   font-family: inherit;
 }
 .text-input::placeholder {
@@ -387,7 +389,7 @@ const handleKeyup = (e) => {
   padding: 6px;
   cursor: pointer;
   margin-left: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   transition: background 0.15s;
   user-select: none;
 }
@@ -398,9 +400,9 @@ const handleKeyup = (e) => {
 /* 登录按钮 */
 .login-btn {
   width: 100%;
-  padding: 14px 0;
+  height: 44px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-btn);
   background: var(--color-primary);
   color: var(--color-bg-card);
   font-size: 16px;
@@ -444,7 +446,7 @@ const handleKeyup = (e) => {
 .extra-links {
   display: flex;
   justify-content: flex-end;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .forgot-link {

@@ -210,7 +210,7 @@ export default async function friendRoutes(fastify) {
 
     const kw = `%${q.trim()}%`
     const rows = queryAll(
-      `SELECT id, name, account, role, department,
+      `SELECT id, name, account, role, department, avatar,
               (last_active > datetime('now','localtime','-${ONLINE_THRESHOLD_MINUTES} minutes')) AS online
        FROM users
        WHERE (name LIKE ? OR account LIKE ? OR department LIKE ?)
@@ -225,6 +225,7 @@ export default async function friendRoutes(fastify) {
       account: u.account,
       role: u.role,
       department: u.department || '',
+      avatar: u.avatar || '',
       isOnline: !!u.online,
     }))
   })
@@ -235,7 +236,7 @@ export default async function friendRoutes(fastify) {
    */
   fastify.get('/tenant/admins', { preHandler: authGuard }, async () => {
     const rows = queryAll(
-      `SELECT id, name, account, role, department,
+      `SELECT id, name, account, role, department, avatar,
               (last_active > datetime('now','localtime','-${ONLINE_THRESHOLD_MINUTES} minutes')) AS online
        FROM users
        WHERE role IN ('管理员', '系统部署人员') AND disabled = 0
@@ -247,6 +248,7 @@ export default async function friendRoutes(fastify) {
       account: u.account,
       role: u.role,
       department: u.department || '',
+      avatar: u.avatar || '',
       isOnline: !!u.online,
     }))
   })

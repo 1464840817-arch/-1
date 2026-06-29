@@ -6,6 +6,7 @@ import { ref, onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { getProfile, updateProfile, changePassword } from '../api/user.js'
 import { userStore, updateUser, currentIsAdmin } from '../store/user.js'
+import { PhArrowLeft, PhCamera, PhWarning } from '@phosphor-icons/vue'
 
 const router = useRouter()
 
@@ -120,9 +121,10 @@ const handleSave = async () => {
       }
     }
 
-    await updateProfile(body)
+    const result = await updateProfile(body)
     // 同步到全局用户状态，ProfileView 等页面自动更新
     updateUser({
+      avatar: result.avatar || '',
       name: form.value.name.trim(),
       desc: form.value.desc.trim(),
     })
@@ -198,7 +200,7 @@ onMounted(() => {
 
     <!-- 1. 顶部导航 -->
     <header class="edit-header">
-      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter.prevent="goBack" @keydown.space.prevent="goBack">← 返回</span>
+      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter.prevent="goBack" @keydown.space.prevent="goBack"><PhArrowLeft :size="18" class="back-icon" /> 返回</span>
       <span class="title">编辑资料</span>
       <button
         class="save-btn"
@@ -238,7 +240,7 @@ onMounted(() => {
           />
           <span v-else class="avatar-placeholder">{{ form.name[0] || '?' }}</span>
           <div class="avatar-overlay">
-            <span class="camera-icon">📷</span>
+            <span class="camera-icon"><PhCamera :size="18" /></span>
           </div>
         </div>
         <input
@@ -376,13 +378,13 @@ onMounted(() => {
 .edit-page {
   min-height: 100vh;
   background: var(--color-bg-page);
-  padding-bottom: 40px;
+  padding-bottom: 80px;
 }
 
 /* --- 1. 顶部 --- */
 .edit-header {
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -392,6 +394,9 @@ onMounted(() => {
   z-index: 10;
 }
 .back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 15px;
   color: var(--color-primary);
   font-weight: 500;
@@ -399,6 +404,10 @@ onMounted(() => {
   background: none;
   border: none;
   padding: 0;
+}
+.back-icon {
+  display: block;
+  flex-shrink: 0;
 }
 .title {
   font-size: 16px;
@@ -410,8 +419,9 @@ onMounted(() => {
   color: #fff;
   background: var(--color-primary);
   border: none;
-  padding: 6px 16px;
-  border-radius: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-btn);
   font-weight: 500;
   cursor: pointer;
   transition: opacity 0.2s;
@@ -434,8 +444,8 @@ onMounted(() => {
   animation: pulse 1.5s infinite;
 }
 .skeleton-avatar {
-  width: 64px;
-  height: 64px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   margin: 0 auto 20px auto;
 }
@@ -479,59 +489,69 @@ onMounted(() => {
 }
 .form-item {
   background: var(--color-bg-card);
-  border-radius: 10px;
-  padding: 14px 16px;
+  border-radius: var(--radius-card);
+  padding: 16px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   margin-bottom: 12px;
 }
 .form-item .label {
-  width: 80px;
-  font-size: 15px;
-  color: var(--color-text-body);
-  font-weight: 500;
-  flex-shrink: 0;
+  font-size: 16px;
+  color: var(--color-text-primary);
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 .form-item .value.readonly {
-  flex: 1;
   font-size: 15px;
   color: var(--color-text-tertiary);
-  text-align: right;
 }
 .input-wrapper {
-  flex: 1;
+  width: 100%;
   display: flex;
   flex-direction: column;
 }
-.form-item .input,
-.form-item .textarea {
+.form-item .input {
   width: 100%;
-  border: none;
+  height: 48px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
   outline: none;
   font-size: 15px;
   color: var(--color-text-body);
-  background: transparent;
-  text-align: right;
+  background: var(--color-bg-card);
+  padding: 0 12px;
   font-family: inherit;
   box-sizing: border-box;
+}
+.form-item .input:focus {
+  border-color: var(--color-primary);
+}
+.form-item .textarea {
+  width: 100%;
+  height: 100px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  outline: none;
+  font-size: 15px;
+  color: var(--color-text-body);
+  background: var(--color-bg-card);
+  padding: 12px;
+  font-family: inherit;
+  box-sizing: border-box;
+  resize: none;
+  line-height: 1.5;
+}
+.form-item .textarea:focus {
+  border-color: var(--color-primary);
 }
 .form-item .input::placeholder,
 .form-item .textarea::placeholder {
   color: var(--color-text-tertiary);
 }
-.form-item .textarea {
-  text-align: left;
-  resize: none;
-  line-height: 1.5;
-}
-.input-error {
-  /* 输入框本身不加红框，通过下方 error-msg 提示 */
-}
 .error-msg {
   font-size: 12px;
   color: var(--color-error);
   margin-top: 4px;
-  text-align: right;
 }
 .textarea-footer {
   display: flex;
@@ -549,14 +569,20 @@ onMounted(() => {
 .avatar-item {
   cursor: pointer;
   user-select: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 24px;
+}
+.avatar-item .label {
+  margin-bottom: 0;
 }
 .avatar-item:active {
   background: var(--color-bg-card);
 }
 .avatar-box {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
@@ -572,7 +598,7 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: var(--color-primary);
+  background: #E2E8F0;
   color: #fff;
   font-size: 22px;
   font-weight: bold;
@@ -617,15 +643,16 @@ onMounted(() => {
   display: block;
   width: 100%;
   margin-top: 12px;
-  padding: 12px 0;
+  height: 44px;
   background: var(--color-primary);
   color: #fff;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-btn);
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   transition: opacity 0.2s;
+  padding: 0;
 }
 .change-pwd-btn:disabled {
   opacity: 0.5;

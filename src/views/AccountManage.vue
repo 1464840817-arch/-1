@@ -3,6 +3,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
+import { PhArrowLeft, PhWarning, PhEnvelopeOpen } from '@phosphor-icons/vue'
 import { userStore, currentIsSuperAdmin } from '../store/user.js'
 import { ROLES, ROLE_LABELS } from '../store/auth.js'
 import { getUserList, createUser, setUserStatus, deleteUser, resetPassword } from '../api/auth.js'
@@ -228,7 +229,7 @@ onMounted(() => { loadUsers() })
 
     <!-- 顶部导航 -->
     <header class="page-header">
-      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter="goBack" @keydown.space.prevent="goBack">← 返回</span>
+      <span class="back-btn" role="button" tabindex="0" aria-label="返回" @click="goBack" @keydown.enter="goBack" @keydown.space.prevent="goBack"><PhArrowLeft :size="18" class="back-icon" /> 返回</span>
       <span class="title">用户管理</span>
       <button class="create-btn" @click="openCreateDialog">+ 新建</button>
     </header>
@@ -261,7 +262,7 @@ onMounted(() => { loadUsers() })
 
     <!-- 错误态 -->
     <div v-else-if="loadError" class="message-state">
-      <span class="message-icon">⚠️</span>
+      <span class="message-icon"><PhWarning :size="40" /></span>
       <p class="message-text">{{ loadError }}</p>
       <button class="retry-btn" @click="loadUsers">重试</button>
     </div>
@@ -278,7 +279,8 @@ onMounted(() => { loadUsers() })
         }"
       >
         <div class="user-avatar" :class="user.role">
-          {{ user.name[0] }}
+          <img v-if="user.avatar" :src="user.avatar" class="user-avatar-img" alt="" />
+          <span v-else>{{ user.name[0] }}</span>
         </div>
         <div class="user-info">
           <div class="user-name-line">
@@ -323,7 +325,7 @@ onMounted(() => { loadUsers() })
 
       <!-- 空列表 -->
       <div v-if="filteredUsers.length === 0" class="empty-inline">
-        <span class="empty-icon">📭</span>
+        <span class="empty-icon"><PhEnvelopeOpen :size="40" /></span>
         <p class="empty-text">暂无该角色用户</p>
       </div>
     </div>
@@ -473,7 +475,7 @@ onMounted(() => { loadUsers() })
 /* --- 顶部导航 --- */
 .page-header {
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 16px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -487,7 +489,11 @@ onMounted(() => { loadUsers() })
   color: var(--color-primary);
   font-weight: 500;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
+.back-icon { display: block; flex-shrink: 0; }
 .title {
   font-size: 16px;
   font-weight: 600;
@@ -498,8 +504,9 @@ onMounted(() => { loadUsers() })
   color: #fff;
   background: var(--color-primary);
   border: none;
-  padding: 6px 14px;
-  border-radius: 6px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: var(--radius-btn);
   font-weight: 500;
   cursor: pointer;
   font-family: inherit;
@@ -521,7 +528,7 @@ onMounted(() => { loadUsers() })
 .filter-chip {
   font-size: 13px;
   padding: 6px 14px;
-  border-radius: 16px;
+  border-radius: var(--radius-full);
   background: var(--color-divider);
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -564,11 +571,11 @@ onMounted(() => { loadUsers() })
 
 .user-card {
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px;
   display: flex;
   gap: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border);
   transition: all 0.2s;
 }
@@ -591,10 +598,14 @@ onMounted(() => { loadUsers() })
   font-weight: 700;
   color: #fff;
   flex-shrink: 0;
+  overflow: hidden;
 }
-.user-avatar[class*="一线"] { background: var(--color-primary); }
-.user-avatar[class*="管理员"]:not([class*="超级"]) { background: #f59e0b; }
-.user-avatar[class*="系统部署"] { background: #7c3aed; }
+.user-avatar-img {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.user-avatar { background: #E2E8F0; }
 
 /* 用户信息 */
 .user-info {
@@ -602,12 +613,12 @@ onMounted(() => { loadUsers() })
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .user-name-line {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
 }
 .user-name {
@@ -618,12 +629,12 @@ onMounted(() => { loadUsers() })
 .role-badge {
   font-size: 10px;
   padding: 2px 7px;
-  border-radius: 8px;
+  border-radius: var(--radius-tag);
   font-weight: 500;
 }
 .role-engineer { background: var(--color-primary-light); color: var(--color-primary); }
-.role-admin { background: #fef3c7; color: #b45309; }
-.role-super { background: #ede9fe; color: #6d28d9; }
+.role-admin { background: var(--color-warning-bg); color: var(--color-warning); }
+.role-super { background: var(--color-primary-light); color: var(--color-primary); }
 .disabled-tag {
   font-size: 10px;
   padding: 2px 7px;
@@ -644,15 +655,16 @@ onMounted(() => { loadUsers() })
 /* 操作按钮 */
 .user-actions {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;
+  gap: 4px;
   flex-shrink: 0;
   justify-content: center;
+  align-items: center;
 }
 .action-btn {
   font-size: 12px;
-  padding: 5px 12px;
-  border-radius: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-btn);
   border: 1px solid var(--color-border);
   background: transparent;
   cursor: pointer;
@@ -668,11 +680,8 @@ onMounted(() => { loadUsers() })
   border-color: var(--color-success);
 }
 .pwd-btn {
-  color: #6d28d9;
-  border-color: #d4c4f0;
-}
-.pwd-btn:hover {
-  background: #f5f3ff;
+  color: var(--color-primary);
+  border-color: var(--color-primary-light);
 }
 .delete-btn {
   color: var(--color-text-tertiary);
@@ -691,7 +700,7 @@ onMounted(() => { loadUsers() })
   padding: 80px 16px;
   gap: 12px;
 }
-.message-icon { font-size: 40px; }
+.message-icon { display: flex; color: var(--color-text-tertiary); }
 .message-text {
   font-size: 14px;
   color: var(--color-text-secondary);
@@ -702,8 +711,9 @@ onMounted(() => { loadUsers() })
   color: #fff;
   background: var(--color-primary);
   border: none;
-  padding: 8px 20px;
-  border-radius: 6px;
+  height: 44px;
+  padding: 0 24px;
+  border-radius: var(--radius-btn);
   cursor: pointer;
   font-family: inherit;
 }
@@ -715,14 +725,14 @@ onMounted(() => { loadUsers() })
   align-items: center;
   padding: 60px 20px;
 }
-.empty-icon { font-size: 40px; margin-bottom: 10px; }
+.empty-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 10px; }
 .empty-text { font-size: 14px; color: var(--color-text-tertiary); margin: 0; }
 
 /* --- 对话框遮罩 --- */
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.4);
+  background: rgba(15,23,42,0.5);
   display: flex;
   justify-content: center;
   align-items: flex-end;
@@ -730,7 +740,7 @@ onMounted(() => { loadUsers() })
 }
 .dialog-card {
   background: var(--color-bg-card);
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius-card);
   padding: 20px 20px 28px 20px;
   width: 100%;
   max-width: 500px;
@@ -787,13 +797,14 @@ select.dialog-input {
 }
 .dialog-btns {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   margin-top: 20px;
 }
 .dialog-btn {
   flex: 1;
-  padding: 12px;
-  border-radius: 8px;
+  height: 44px;
+  padding: 0;
+  border-radius: var(--radius-btn);
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;

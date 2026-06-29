@@ -29,7 +29,7 @@
 .error-code {
   font-size: 5rem;
   font-weight: 700;
-  color: var(--color-primary, #4a90d9);
+  color: var(--color-primary, #2563EB);
   line-height: 1;
   margin-bottom: 1rem;
 }
@@ -47,11 +47,12 @@ h2 {
 }
 
 .back-btn {
-  padding: 0.625rem 1.5rem;
-  background: var(--color-primary, #4a90d9);
+  height: 44px;
+  padding: 0 1.5rem;
+  background: var(--color-primary, #2563EB);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-btn);
   font-size: 0.875rem;
   cursor: pointer;
   transition: opacity 0.2s;

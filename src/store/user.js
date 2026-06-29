@@ -203,7 +203,7 @@ export async function restoreSession() {
  * 登录成功后设置用户状态
  * @param {{ name: string, token: string, role: string, account: string }} loginData
  */
-export function setLoginState({ name, token, refreshToken, role, account }) {
+export function setLoginState({ name, token, refreshToken, role, account, avatar }) {
   _sessionReady = true
   userStore.name = name
   userStore.role = role || '一线工程师'
@@ -211,6 +211,7 @@ export function setLoginState({ name, token, refreshToken, role, account }) {
   userStore.refreshToken = refreshToken || ''
   userStore.isLoggedIn = true
   if (account) userStore.account = account
+  if (avatar) userStore.avatar = avatar
   persistUser()
 }
 

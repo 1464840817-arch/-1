@@ -40,7 +40,10 @@ export default async function messageRoutes(fastify) {
     )
 
     const rows = queryAll(
-      `SELECT * FROM messages WHERE ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      `SELECT m.*, u.avatar, u.account AS sender_account, u.department AS sender_department
+       FROM messages m
+       LEFT JOIN users u ON u.id = m.target_id
+       WHERE ${whereClause} ORDER BY m.created_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset],
     )
     return {
@@ -136,6 +139,9 @@ function formatMessage(row) {
     id: row.id,
     type: row.type,
     sender: row.sender,
+    senderAccount: row.sender_account || '',
+    senderAvatar: row.avatar || '',
+    senderDepartment: row.sender_department || '',
     action: row.action,
     content: row.content,
     targetId: row.target_id,

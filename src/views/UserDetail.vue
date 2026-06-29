@@ -6,6 +6,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { getUserProfile, getUserPosts } from '../api/user.js'
 import { friendStore, isFriend, addToFriends, acceptFriendRequest, removeFromFriends, initFriendData, loadFriendRequests } from '../store/friends.js'
 import { userStore } from '../store/user.js'
+import { PhArrowLeft, PhChatCircle, PhDotsThree, PhNotePencil, PhHeart, PhEye, PhUserPlus, PhUserMinus, PhTrash, PhCheckCircle, PhSmileySad } from '@phosphor-icons/vue'
+import { formatDateTime } from '../utils/date.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -151,7 +153,7 @@ onUnmounted(() => {
         @click="goBack"
         @keydown.enter.prevent="goBack"
         @keydown.space.prevent="goBack"
-      >&larr; 返回</span>
+      ><PhArrowLeft :size="15" /> 返回</span>
       <span class="title">用户详情</span>
       <span class="header-spacer"></span>
     </header>
@@ -164,7 +166,7 @@ onUnmounted(() => {
 
     <!-- ==================== 错误态 ==================== -->
     <div v-else-if="profileError" class="error-state">
-      <span class="error-icon">&#x1F615;</span>
+      <span class="error-icon"><PhSmileySad :size="48" /></span>
       <p class="error-text">{{ profileError }}</p>
       <button class="retry-btn" @click="loadProfile">重试</button>
     </div>
@@ -176,7 +178,8 @@ onUnmounted(() => {
         <!-- ========== 资料卡片 ========== -->
         <div class="profile-card">
           <div class="profile-main">
-            <div class="profile-avatar">{{ profile.name[0] }}</div>
+            <img v-if="profile.avatar" :src="profile.avatar" class="profile-avatar-img" alt="头像" />
+            <div v-else class="profile-avatar">{{ profile.name[0] }}</div>
             <div class="profile-info">
               <div class="profile-name-row">
                 <span class="profile-name">{{ profile.name }}</span>
@@ -190,7 +193,7 @@ onUnmounted(() => {
           <!-- 操作按钮（非本人） -->
           <div v-if="!isSelf" class="profile-actions">
             <button v-if="isCurrentFriend && route.query.from !== 'chat'" class="action-btn chat-btn" @click="goToChat">
-              &#x1F4AC; 私聊
+              <PhChatCircle :size="16" /> 私聊
             </button>
             <button
               v-if="isCurrentFriend"
@@ -198,7 +201,8 @@ onUnmounted(() => {
               :disabled="friendActionLoading"
               @click="handleRemoveFriend"
             >
-              {{ friendActionLoading ? '…' : '&#x1F5D1;&#xFE0F; 删除好友' }}
+              <template v-if="friendActionLoading">…</template>
+              <template v-else><PhTrash :size="14" /> 删除好友</template>
             </button>
             <button
               v-else
@@ -207,7 +211,9 @@ onUnmounted(() => {
               :disabled="friendActionLoading"
               @click="handleAddFriend"
             >
-              {{ friendActionLoading ? '…' : hasPendingRequest ? '&#x2705; 同意好友申请' : '&#x2795; 添加好友' }}
+              <template v-if="friendActionLoading">…</template>
+              <template v-else-if="hasPendingRequest"><PhCheckCircle :size="14" /> 同意好友申请</template>
+              <template v-else><PhUserPlus :size="14" /> 添加好友</template>
             </button>
           </div>
         </div>
@@ -230,7 +236,7 @@ onUnmounted(() => {
 
           <!-- 空状态 -->
           <div v-else-if="articles.length === 0" class="empty-articles">
-            <span class="empty-icon">&#x1F4DD;</span>
+            <span class="empty-icon"><PhNotePencil :size="40" /></span>
             <p>暂无已发布文章</p>
           </div>
 
@@ -249,14 +255,14 @@ onUnmounted(() => {
             >
               <div class="article-card-top">
                 <span class="article-type">{{ item.type }}</span>
-                <span class="article-date">{{ item.date }}</span>
+                <span class="article-date">{{ formatDateTime(item.date) }}</span>
               </div>
               <h4 class="article-title">{{ item.title }}</h4>
               <p class="article-desc">{{ item.desc }}</p>
               <div class="article-stats">
-                <span v-if="item.likes">&#x2764;&#xFE0F; {{ item.likes }}</span>
-                <span>&#x1F4AC; {{ item.comments }}</span>
-                <span>&#x1F441;&#xFE0F; {{ item.views }}</span>
+                <span v-if="item.likes"><PhHeart :size="20" weight="fill" /> {{ item.likes }}</span>
+                <span><PhChatCircle :size="20" /> {{ item.comments }}</span>
+                <span><PhEye :size="20" /> {{ item.views }}</span>
               </div>
             </article>
           </div>
@@ -282,7 +288,7 @@ onUnmounted(() => {
 /* ==================== 顶部导航 ==================== */
 .page-header {
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 16px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -339,7 +345,7 @@ onUnmounted(() => {
   align-items: center;
   padding: 100px 20px;
 }
-.error-icon { font-size: 48px; margin-bottom: 12px; }
+.error-icon { display: flex; justify-content: center; color: var(--color-text-tertiary); margin-bottom: 12px; }
 .error-text { font-size: 15px; color: var(--color-text-secondary); margin: 0 0 16px 0; }
 .retry-btn {
   border: 1px solid var(--color-primary);
@@ -365,27 +371,33 @@ onUnmounted(() => {
 /* ==================== 资料卡片 ==================== */
 .profile-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   padding: 20px;
   margin-top: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border);
 }
 .profile-main {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   align-items: flex-start;
 }
 .profile-avatar {
   width: 56px; height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary), #6366f1);
+  background: #E2E8F0;
   color: #fff;
   font-size: 22px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+.profile-avatar-img {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
   flex-shrink: 0;
 }
 .profile-info {
@@ -408,7 +420,7 @@ onUnmounted(() => {
   color: var(--color-primary);
   background: var(--color-primary-light);
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   font-weight: 500;
 }
 .profile-meta {
@@ -427,7 +439,7 @@ onUnmounted(() => {
 /* 操作按钮 */
 .profile-actions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--color-divider);
@@ -435,7 +447,7 @@ onUnmounted(() => {
 .action-btn {
   flex: 1;
   padding: 10px 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-btn);
   font-size: 14px;
   font-weight: 600;
   border: none;
@@ -445,7 +457,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
 }
 .action-btn:disabled {
   opacity: 0.5;
@@ -468,12 +480,12 @@ onUnmounted(() => {
   color: #fff;
 }
 .accept-request-btn {
-  background: #dcfce7;
-  color: #16a34a;
-  border: 1px solid #16a34a;
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
 }
 .accept-request-btn:active:not(:disabled) {
-  background: #16a34a;
+  background: var(--color-success);
   color: #fff;
 }
 .unfriend-btn {
@@ -502,8 +514,8 @@ onUnmounted(() => {
 .loading-inline {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 30px 0;
+  gap: 12px;
+  padding: 32px 0;
   justify-content: center;
   font-size: 14px;
   color: var(--color-text-tertiary);
@@ -513,7 +525,7 @@ onUnmounted(() => {
 .error-inline {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 20px 0;
   justify-content: center;
   font-size: 14px;
@@ -524,7 +536,7 @@ onUnmounted(() => {
   background: var(--color-primary-light);
   color: var(--color-primary);
   padding: 4px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   font-size: 13px;
   cursor: pointer;
   font-family: inherit;
@@ -538,20 +550,20 @@ onUnmounted(() => {
   padding: 40px 20px;
   color: var(--color-text-tertiary);
 }
-.empty-icon { font-size: 40px; margin-bottom: 8px; }
+.empty-icon { display: flex; justify-content: center; color: var(--color-text-tertiary); margin-bottom: 8px; }
 .empty-articles p { font-size: 14px; margin: 0; }
 
 /* 文章列表 */
 .articles-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .article-card {
   background: var(--color-bg-card);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   padding: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border);
   cursor: pointer;
   transition: background 0.15s;
@@ -597,8 +609,9 @@ onUnmounted(() => {
 .article-stats {
   display: flex;
   gap: 12px;
-  font-size: 12px;
-  color: var(--color-text-tertiary);
+  font-size: 14px;
+  color: #64748B;
+  align-items: center;
 }
 
 /* ==================== Toast ==================== */
@@ -611,7 +624,7 @@ onUnmounted(() => {
   color: #fff;
   font-size: 14px;
   padding: 10px 24px;
-  border-radius: 24px;
+  border-radius: var(--radius-btn);
   z-index: 500;
   pointer-events: none;
   white-space: nowrap;

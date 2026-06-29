@@ -3,6 +3,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { PhArrowLeft, PhPaperPlaneTilt, PhChatCircle, PhSmileySad } from '@phosphor-icons/vue'
 import { getUserProfile } from '../api/user.js'
 import { getChatHistory, sendChatMessage } from '../api/chat.js'
 import { userStore } from '../store/user.js'
@@ -227,7 +228,7 @@ onUnmounted(() => {
         @click="goBack"
         @keydown.enter.prevent="goBack"
         @keydown.space.prevent="goBack"
-      >&larr; 返回</span>
+      ><PhArrowLeft :size="18" class="back-icon" /> 返回</span>
 
       <div
         v-if="friend"
@@ -239,7 +240,8 @@ onUnmounted(() => {
         @keydown.enter.prevent="goToUserDetail"
         @keydown.space.prevent="goToUserDetail"
       >
-        <div class="header-avatar">{{ friend.name[0] }}</div>
+        <img v-if="friend.avatar" :src="friend.avatar" class="header-avatar-img" alt="" />
+        <div v-else class="header-avatar">{{ friend.name[0] }}</div>
         <div class="header-info">
           <span class="header-name">{{ friend.name }}</span>
           <span class="header-meta">{{ friend.department || '未分配部门' }}</span>
@@ -260,7 +262,7 @@ onUnmounted(() => {
     </div>
 
     <div v-else-if="friendError" class="error-state">
-      <span class="error-icon">😕</span>
+      <PhSmileySad :size="48" class="error-icon" />
       <p class="error-text">{{ friendError }}</p>
       <button class="retry-btn" @click="goBack">返回</button>
     </div>
@@ -282,7 +284,7 @@ onUnmounted(() => {
 
       <!-- 空消息 -->
       <div v-if="messages.length === 0 && !messagesLoading" class="empty-chat">
-        <span class="empty-icon">💬</span>
+        <PhChatCircle :size="48" class="empty-icon" />
         <p class="empty-text">暂无消息</p>
         <p class="empty-hint">发送第一条消息开始对话</p>
       </div>
@@ -334,7 +336,8 @@ onUnmounted(() => {
         @click="handleSend"
         aria-label="发送消息"
       >
-        {{ sending ? '…' : '发送' }}
+        <PhPaperPlaneTilt v-if="!sending" :size="18" />
+        <span v-else>…</span>
       </button>
     </div>
 
@@ -371,13 +374,17 @@ onUnmounted(() => {
   font-weight: 500;
   cursor: pointer;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
+.back-icon { display: block; flex-shrink: 0; }
 
 /* 头部好友信息 */
 .header-friend {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   cursor: pointer;
   padding: 2px 8px;
   border-radius: 8px;
@@ -390,13 +397,19 @@ onUnmounted(() => {
 .header-avatar {
   width: 36px; height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary), #6366f1);
+  background: var(--color-primary);
   color: #fff;
   font-size: 15px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+.header-avatar-img {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
   flex-shrink: 0;
 }
 .header-info {
@@ -469,7 +482,7 @@ onUnmounted(() => {
   padding: 100px 20px;
   flex: 1;
 }
-.error-icon { font-size: 48px; margin-bottom: 12px; }
+.error-icon { color: var(--color-text-tertiary); margin-bottom: 12px; }
 .error-text { font-size: 15px; color: var(--color-text-secondary); margin: 0 0 16px 0; }
 .retry-btn {
   border: 1px solid var(--color-primary);
@@ -509,7 +522,7 @@ onUnmounted(() => {
   align-items: center;
   margin-top: 120px;
 }
-.empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-icon { color: var(--color-text-tertiary); margin-bottom: 12px; }
 .empty-text { font-size: 16px; font-weight: 600; color: var(--color-text-body); margin: 0 0 6px 0; }
 .empty-hint { font-size: 13px; color: var(--color-text-tertiary); margin: 0; }
 
@@ -528,7 +541,7 @@ onUnmounted(() => {
 .msg-mine {
   justify-content: flex-end;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 /* 时间分隔 */
@@ -536,27 +549,25 @@ onUnmounted(() => {
   text-align: center;
   font-size: 12px;
   color: var(--color-text-tertiary);
-  padding: 14px 0 10px;
+  padding: 16px 0 10px;
 }
 
 /* 气泡 */
 .msg-bubble {
   max-width: 72%;
   padding: 10px 15px;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   word-break: break-word;
   position: relative;
 }
 .msg-bubble.other {
   background: var(--color-bg-card);
   color: var(--color-text-primary);
-  border-radius: 4px 14px 14px 14px;
   border: 1px solid var(--color-divider);
 }
 .msg-bubble.mine {
   background: var(--color-primary);
   color: #fff;
-  border-radius: 14px 4px 14px 14px;
 }
 .msg-bubble.mine.failed {
   opacity: 0.5;
@@ -589,15 +600,15 @@ onUnmounted(() => {
   border-top: 1px solid var(--color-divider);
   display: flex;
   align-items: flex-end;
-  gap: 10px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
 .input-field {
   flex: 1;
   background: var(--color-bg-page);
-  border: none;
-  border-radius: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
   padding: 10px 16px;
   font-size: 15px;
   font-family: inherit;
@@ -607,10 +618,10 @@ onUnmounted(() => {
   min-height: 20px;
   max-height: 100px;
   line-height: 1.4;
-  transition: box-shadow 0.2s;
+  transition: border-color 0.2s;
 }
 .input-field:focus {
-  box-shadow: 0 0 0 2px var(--color-primary-light);
+  border-color: var(--color-primary);
 }
 .input-field::placeholder {
   color: var(--color-text-tertiary);
@@ -620,18 +631,21 @@ onUnmounted(() => {
   background: var(--color-primary);
   color: #fff;
   border: none;
-  border-radius: 20px;
-  padding: 9px 20px;
+  border-radius: var(--radius-btn);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
-  transition: opacity 0.15s;
   flex-shrink: 0;
-  height: 40px;
+  height: 44px;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 .send-btn:active:not(:disabled) {
-  opacity: 0.8;
+  opacity: 0.9;
 }
 .send-btn:disabled {
   opacity: 0.4;
@@ -648,7 +662,7 @@ onUnmounted(() => {
   color: #fff;
   font-size: 14px;
   padding: 10px 24px;
-  border-radius: 24px;
+  border-radius: var(--radius-btn);
   z-index: 500;
   pointer-events: none;
   white-space: nowrap;

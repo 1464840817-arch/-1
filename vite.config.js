@@ -54,6 +54,8 @@ export default defineConfig({
           if (req.method === 'GET' && (req.headers.accept || '').includes('text/html')) return '/index.html'
         },
       },
+      '/avatars': 'http://localhost:3000',
+      '/uploads': 'http://localhost:3000',
     }
   }
 })

@@ -5,6 +5,7 @@ import { ref, computed, onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { ROLE_LABELS } from '../store/auth.js'
 import { getOperationLogs } from '../api/admin.js'
+import { PhArrowLeft, PhWarning, PhClipboardText } from '@phosphor-icons/vue'
 
 const router = useRouter()
 const toast = inject('showToast', null)
@@ -85,7 +86,7 @@ function roleClass(role) {
   <main class="log-page" aria-label="操作日志">
     <!-- 顶部导航栏 -->
     <header class="page-header">
-      <span class="back-btn" @click="goBack">← 返回</span>
+      <span class="back-btn" @click="goBack"><PhArrowLeft :size="18" class="back-icon" /> 返回</span>
       <span class="title">操作日志</span>
       <span class="log-count">{{ logs.length }} 条记录</span>
     </header>
@@ -97,14 +98,14 @@ function roleClass(role) {
 
     <!-- 错误态 -->
     <div v-else-if="error" class="message-state">
-      <span class="message-icon">⚠️</span>
+      <span class="message-icon"><PhWarning :size="40" /></span>
       <p class="message-text">{{ error }}</p>
       <button class="retry-btn" @click="loadLogs">重试</button>
     </div>
 
     <!-- 空数据 -->
     <div v-else-if="logs.length === 0" class="message-state">
-      <span class="message-icon">📋</span>
+      <span class="message-icon"><PhClipboardText :size="40" /></span>
       <p class="message-text">暂无操作记录</p>
     </div>
 
@@ -159,10 +160,17 @@ function roleClass(role) {
   z-index: 10;
 }
 .back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 15px;
   color: var(--color-primary);
   font-weight: 500;
   cursor: pointer;
+  flex-shrink: 0;
+}
+.back-icon {
+  display: block;
   flex-shrink: 0;
 }
 .title {
@@ -200,7 +208,8 @@ function roleClass(role) {
   gap: 12px;
 }
 .message-icon {
-  font-size: 40px;
+  display: flex;
+  color: var(--color-text-tertiary);
 }
 .message-text {
   font-size: 14px;
@@ -212,8 +221,9 @@ function roleClass(role) {
   color: #fff;
   background: var(--color-primary);
   border: none;
-  padding: 8px 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
+  height: 44px;
+  padding: 0 24px;
   cursor: pointer;
   font-family: inherit;
 }
@@ -230,7 +240,7 @@ function roleClass(role) {
   width: 100%;
   border-collapse: collapse;
   background: var(--color-bg-card, #fff);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 
@@ -289,12 +299,12 @@ th.sortable:hover {
 /* --- 角色标签（复用 AccountManage 风格） --- */
 .role-badge {
   font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 8px;
+  padding: 4px 8px;
+  border-radius: var(--radius-tag);
   font-weight: 500;
   white-space: nowrap;
 }
 .role-engineer { background: var(--color-primary-light); color: var(--color-primary); }
-.role-admin { background: #fef3c7; color: #b45309; }
-.role-super { background: #ede9fe; color: #6d28d9; }
+.role-admin { background: var(--color-warning-bg); color: var(--color-warning); }
+.role-super { background: var(--color-primary-light); color: var(--color-primary); }
 </style>

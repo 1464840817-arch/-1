@@ -3,7 +3,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
+import { PhX, PhArrowLeft, PhArrowCounterClockwise, PhTrash, PhPackage, PhCaretUp, PhCaretDown } from '@phosphor-icons/vue'
 import { getDelistedPosts, restoreArticle, permanentDeleteArticle } from '../api/article.js'
+import { formatDateTime } from '../utils/date.js'
 
 const router = useRouter()
 
@@ -217,7 +219,8 @@ onUnmounted(() => {
         @keydown.enter.prevent="isManageMode ? exitManageMode() : goBack()"
         @keydown.space.prevent="isManageMode ? exitManageMode() : goBack()"
       >
-        {{ isManageMode ? '✕ 取消' : '← 返回' }}
+        <template v-if="isManageMode"><PhX :size="15" class="back-icon" /> 取消</template>
+        <template v-else><PhArrowLeft :size="18" class="back-icon" /> 返回</template>
       </span>
       <span class="title">
         {{ isManageMode ? `已选 ${selectedCount} 项` : '已下架文章' }}
@@ -277,7 +280,7 @@ onUnmounted(() => {
 
     <!-- ==================== 空状态 ==================== -->
     <div v-else-if="!loading && myPosts.length === 0" class="empty-state">
-      <span class="empty-icon">📦</span>
+      <span class="empty-icon"><PhPackage :size="56" /></span>
       <p class="empty-text">暂无已下架文章</p>
       <p class="empty-hint">在"我的发布"中删除的文章会出现在这里</p>
     </div>
@@ -296,7 +299,7 @@ onUnmounted(() => {
         class="pull-hint"
         :style="{ height: pullDistance + 'px', opacity: Math.min(pullDistance / PULL_THRESHOLD, 1) }"
       >
-        <span class="pull-icon">{{ pullDistance >= PULL_THRESHOLD ? '⬆️' : '⬇️' }}</span>
+        <span class="pull-icon"><PhCaretUp v-if="pullDistance >= PULL_THRESHOLD" :size="14" /><PhCaretDown v-else :size="14" /></span>
         <span class="pull-text">{{ pullDistance >= PULL_THRESHOLD ? '释放刷新' : '下拉刷新' }}</span>
       </div>
       <article
@@ -339,7 +342,7 @@ onUnmounted(() => {
           <span class="status-badge">已下架</span>
         </div>
         <h3 class="post-title">{{ post.title }}</h3>
-        <span class="post-date">{{ post.date }}</span>
+        <span class="post-date">{{ formatDateTime(post.date) }}</span>
       </article>
 
       <!-- 列表底部 -->
@@ -357,14 +360,14 @@ onUnmounted(() => {
         :disabled="selectedCount === 0"
         @click="restoreSelected"
       >
-        🔄 恢复{{ selectedCount > 0 ? ` (${selectedCount})` : '' }}
+        <PhArrowCounterClockwise :size="16" /> 恢复{{ selectedCount > 0 ? ` (${selectedCount})` : "" }}
       </button>
       <button
         class="action-btn delete-btn"
         :disabled="selectedCount === 0"
         @click="deleteSelected"
       >
-        🗑️ 删除{{ selectedCount > 0 ? ` (${selectedCount})` : '' }}
+        <PhTrash :size="16" /> 删除{{ selectedCount > 0 ? ` (${selectedCount})` : "" }}
       </button>
     </div>
 
@@ -381,7 +384,7 @@ onUnmounted(() => {
 /* --- 顶部导航 --- */
 .page-header {
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 16px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -395,7 +398,11 @@ onUnmounted(() => {
   color: var(--color-primary);
   font-weight: 500;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
+.back-icon { display: block; flex-shrink: 0; }
 .title {
   font-size: 16px;
   font-weight: 600;
@@ -473,12 +480,12 @@ onUnmounted(() => {
 /* --- 骨架屏 --- */
 .skeleton-card {
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px;
   border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .skeleton-row {
   display: flex;
@@ -526,13 +533,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   overflow: hidden;
   transition: height 0.15s;
   color: var(--color-text-tertiary);
   font-size: 13px;
 }
-.pull-icon { font-size: 14px; line-height: 1; }
+.pull-icon { display: flex; align-items: center; }
 .pull-text { user-select: none; }
 .refresh-indicator {
   display: flex;
@@ -562,7 +569,7 @@ onUnmounted(() => {
   padding: 100px 20px;
   text-align: center;
 }
-.empty-icon { font-size: 56px; margin-bottom: 16px; }
+.empty-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 16px; }
 .empty-text { font-size: 16px; font-weight: 600; color: var(--color-text-body); margin: 0 0 6px 0; }
 .empty-hint { font-size: 14px; color: var(--color-text-tertiary); margin: 0; }
 
@@ -571,7 +578,7 @@ onUnmounted(() => {
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   max-width: 720px;
   margin-left: auto;
   margin-right: auto;
@@ -580,9 +587,9 @@ onUnmounted(() => {
 }
 .post-card {
   background: var(--color-bg-card);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border);
   cursor: pointer;
   transition: all 0.15s;
@@ -645,7 +652,7 @@ onUnmounted(() => {
   color: var(--color-primary);
   background: var(--color-primary-light);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-tag);
   font-weight: 500;
 }
 .status-badge {
@@ -653,7 +660,7 @@ onUnmounted(() => {
   color: var(--color-warning);
   background: var(--color-warning-bg);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-tag);
   font-weight: 500;
 }
 .post-title {
@@ -673,7 +680,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
   padding: 20px 0 10px 0;
 }
 .footer-line {
@@ -701,16 +708,20 @@ onUnmounted(() => {
   display: flex;
   gap: 12px;
   z-index: 50;
-  box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
 }
 .action-btn {
   flex: 1;
-  padding: 12px 0;
-  border-radius: 8px;
+  height: 44px;
+  padding: 0;
+  border-radius: var(--radius-btn);
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: opacity 0.2s, transform 0.15s;
 }
 .action-btn:active:not(:disabled) {
@@ -721,14 +732,11 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 .restore-btn {
-  background: var(--color-warning);
+  background: var(--color-primary);
   color: #fff;
 }
 .delete-btn {
-  background: #e53e3e;
+  background: var(--color-error);
   color: #fff;
-}
-.delete-btn:active:not(:disabled) {
-  background: #c53030;
 }
 </style>

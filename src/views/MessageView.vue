@@ -2,6 +2,7 @@
 <!-- 私聊列表 — 按联系人分组展示私信会话 + 顶部通知入口 -->
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { PhBell, PhChatCircle } from '@phosphor-icons/vue'
 import { useRouter } from 'vue-router'
 import { getChatMessages, getNotificationCount, markAllAsRead, markAsRead, deleteMessage } from '../api/message.js'
 import { decrementUnread } from '../store/messages.js'
@@ -30,6 +31,9 @@ const conversations = computed(() => {
       map.set(key, {
         targetId: msg.targetId,
         sender: msg.sender,
+        avatar: msg.senderAvatar || '',
+        account: msg.senderAccount || '',
+        department: msg.senderDepartment || '',
         lastMessage: msg.content,
         lastTime: msg.time,
         lastDate: msg.date,
@@ -147,8 +151,8 @@ const handleConvClick = (conv) => {
     // 乐观扣减底部导航栏消息红点数
     decrementUnread(unreadMsgIds.length)
   }
-  // 导航到用户详情页
-  if (conv.targetId) router.push(`/user/${conv.targetId}`)
+  // 导航到私聊页面
+  if (conv.targetId) router.push(`/chat/${conv.targetId}`)
 }
 
 /** 删除整个会话的所有消息 */
@@ -213,17 +217,19 @@ onUnmounted(() => {
 
     <!-- ==================== 顶部导航 ==================== -->
     <header class="page-header">
-      <template v-if="isManageMode">
-        <span class="cancel-btn" role="button" tabindex="0" @click="exitManageMode" @keydown.enter.prevent="exitManageMode" @keydown.space.prevent="exitManageMode">✕ 取消</span>
-        <span class="title">已选 {{ selectedCount }} 项</span>
-        <button class="batch-delete-btn" :disabled="selectedCount === 0" @click="deleteSelected">
+      <div class="header-left">
+        <span v-if="isManageMode" class="cancel-btn" role="button" tabindex="0" @click="exitManageMode" @keydown.enter.prevent="exitManageMode" @keydown.space.prevent="exitManageMode">取消</span>
+      </div>
+      <div class="header-center">
+        <h1 v-if="!isManageMode" class="header-title">消息</h1>
+        <span v-else class="title">已选 {{ selectedCount }} 项</span>
+      </div>
+      <div class="header-right">
+        <button v-if="isManageMode" class="batch-delete-btn" :disabled="selectedCount === 0" @click="deleteSelected">
           删除{{ selectedCount > 0 ? `(${selectedCount})` : '' }}
         </button>
-      </template>
-      <template v-else>
-        <h1 class="header-title">消息</h1>
         <span
-          v-if="conversations.length > 0"
+          v-else-if="conversations.length > 0"
           class="manage-btn"
           role="button"
           tabindex="0"
@@ -231,7 +237,7 @@ onUnmounted(() => {
           @keydown.enter.prevent="enterManageMode()"
           @keydown.space.prevent="enterManageMode()"
         >管理</span>
-      </template>
+      </div>
     </header>
 
     <!-- ==================== 通知入口卡片 ==================== -->
@@ -246,7 +252,7 @@ onUnmounted(() => {
     >
       <div class="noti-entry-left">
         <div class="noti-icon-box">
-          <span class="noti-icon">🔔</span>
+          <PhBell :size="18" />
         </div>
         <div class="noti-info">
           <span class="noti-label">通知</span>
@@ -254,7 +260,7 @@ onUnmounted(() => {
         </div>
       </div>
       <div class="noti-entry-right">
-        <span v-if="notiUnread > 0" class="noti-badge">{{ notiUnread > 99 ? '99+' : notiUnread }}</span>
+        <span v-if="notiUnread > 0" class="noti-dot" aria-label="有未读通知"></span>
         <span class="noti-arrow">›</span>
       </div>
     </div>
@@ -269,7 +275,7 @@ onUnmounted(() => {
 
     <!-- ==================== 空状态 ==================== -->
     <div v-if="conversations.length === 0" class="empty-state">
-      <span class="empty-icon">💬</span>
+      <PhChatCircle :size="56" />
       <p class="empty-text">暂无私聊</p>
       <p class="empty-hint">当有人向你发送私信时，会话将显示在这里</p>
     </div>
@@ -327,12 +333,14 @@ onUnmounted(() => {
           </span>
 
           <!-- 头像 -->
-          <div class="conv-avatar">{{ conv.sender[0] }}</div>
+          <img v-if="conv.avatar" :src="conv.avatar" class="conv-avatar-img" alt="" />
+          <div v-else class="conv-avatar">{{ conv.sender[0] }}</div>
 
           <!-- 中间内容 -->
           <div class="conv-body">
             <div class="conv-top-row">
               <span class="conv-name">{{ conv.sender }}</span>
+              <span v-if="conv.department" class="conv-dept">{{ conv.department }}</span>
               <span class="conv-time">{{ conv.lastTime }}</span>
             </div>
             <div class="conv-bottom-row">
@@ -358,34 +366,34 @@ onUnmounted(() => {
 /* ==================== 顶部导航 ==================== */
 .page-header {
   background: var(--color-bg-card);
-  padding: 15px 16px;
+  padding: 16px 16px;
   display: flex;
-  justify-content: center;
   align-items: center;
   border-bottom: 1px solid var(--color-divider);
   position: sticky;
   top: 0;
   z-index: 10;
 }
+.header-left   { flex: 1; display: flex; align-items: center; }
+.header-center { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; }
+.header-right  { flex: 1; display: flex; align-items: center; justify-content: flex-end; }
 .header-title { font-size: 18px; font-weight: 600; color: var(--color-text-primary); margin: 0; }
 .manage-btn {
-  position: absolute;
-  right: 16px;
   font-size: 14px; color: var(--color-primary); font-weight: 500;
   cursor: pointer; padding: 4px 8px; border-radius: 4px; transition: background 0.15s;
 }
 .manage-btn:active { background: var(--color-primary-light); }
 
 /* 管理模式 Header */
-.cancel-btn { font-size: 15px; color: var(--color-primary); font-weight: 500; cursor: pointer; }
+.cancel-btn { font-size: 15px; color: var(--color-primary); font-weight: 500; cursor: pointer; padding: 4px 0; }
 .title { font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
 .batch-delete-btn {
   font-size: 14px; font-weight: 500;
   color: var(--color-error);
   background: none;
   border: 1px solid var(--color-error);
-  border-radius: 6px;
-  padding: 5px 14px;
+  border-radius: var(--radius-btn);
+  padding: 4px 14px;
   cursor: pointer;
   font-family: inherit;
   transition: all 0.2s;
@@ -396,51 +404,45 @@ onUnmounted(() => {
 /* ==================== 通知入口卡片 ==================== */
 .noti-entry {
   margin: 12px 16px 0;
-  padding: 14px 16px;
-  background: var(--color-primary);
-  border-radius: 12px;
+  padding: 16px;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-card);
   display: flex;
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: background 0.15s;
   max-width: 720px;
   margin-left: auto;
   margin-right: auto;
   width: calc(100% - 32px);
   box-sizing: border-box;
+  box-shadow: var(--shadow-card);
 }
-.noti-entry:active { opacity: 0.85; }
+.noti-entry:active { background: var(--color-bg-page); }
 .noti-entry-left { display: flex; align-items: center; gap: 12px; }
 .noti-icon-box {
   width: 40px; height: 40px;
-  background: rgba(255,255,255,0.2);
+  background: var(--color-primary-light);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 .noti-info { display: flex; flex-direction: column; gap: 2px; }
-.noti-label { font-size: 16px; font-weight: 600; color: #fff; }
-.noti-sub { font-size: 12px; color: rgba(255,255,255,0.75); }
+.noti-label { font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
+.noti-sub { font-size: 12px; color: var(--color-text-tertiary); }
 .noti-entry-right { display: flex; align-items: center; gap: 8px; }
-.noti-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 7px;
-  background: #fff;
-  color: var(--color-primary);
-  font-size: 12px;
-  font-weight: 700;
-  border-radius: 11px;
-  line-height: 1;
+.noti-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-error);
+  flex-shrink: 0;
 }
-.noti-arrow { font-size: 22px; color: rgba(255,255,255,0.7); font-weight: 300; }
+.noti-arrow { font-size: 20px; color: var(--color-text-tertiary); font-weight: 300; }
 
 /* ==================== 空状态 ==================== */
 .empty-state {
@@ -450,7 +452,7 @@ onUnmounted(() => {
   padding: 100px 20px;
   text-align: center;
 }
-.empty-icon { font-size: 56px; margin-bottom: 16px; }
+.empty-icon { display: flex; color: var(--color-text-tertiary); margin-bottom: 16px; }
 .empty-text { font-size: 16px; font-weight: 600; color: var(--color-text-body); margin: 0 0 6px 0; }
 .empty-hint { font-size: 14px; color: var(--color-text-tertiary); margin: 0; max-width: 260px; line-height: 1.6; }
 
@@ -488,7 +490,7 @@ onUnmounted(() => {
   background: var(--color-bg-card);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  box-shadow: var(--shadow-card);
 }
 
 /* ==================== 会话卡片外层（左滑容器） ==================== */
@@ -529,7 +531,7 @@ onUnmounted(() => {
 .conv-card {
   display: flex;
   align-items: center;
-  padding: 14px 16px;
+  padding: 16px 16px;
   gap: 12px;
   cursor: pointer;
   transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1.2);
@@ -559,7 +561,7 @@ onUnmounted(() => {
 .conv-avatar {
   width: 48px; height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary), #6366f1);
+  background: var(--color-primary);
   color: #fff;
   font-size: 20px;
   font-weight: 700;
@@ -567,18 +569,45 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
+}
+.conv-avatar-img {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 /* 中间内容 */
 .conv-body { flex: 1; min-width: 0; }
 .conv-top-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 6px;
   margin-bottom: 4px;
 }
-.conv-name { font-size: 15px; font-weight: 600; color: var(--color-text-primary); }
-.conv-time { font-size: 12px; color: var(--color-text-tertiary); white-space: nowrap; flex-shrink: 0; }
+.conv-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+.conv-dept {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-page);
+  padding: 1px 6px;
+  border-radius: var(--radius-tag);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.conv-time {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
 .conv-bottom-row {
   display: flex;
   justify-content: space-between;
@@ -606,7 +635,7 @@ onUnmounted(() => {
   color: #fff;
   font-size: 11px;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   line-height: 1;
   flex-shrink: 0;
 }

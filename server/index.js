@@ -25,6 +25,7 @@ import chatRoutes from './routes/chat.js'
 import profileRoutes from './routes/profile.js'
 import adminRoutes from './routes/admin.js'
 import operationLogRoutes from './routes/operationLogs.js'
+import uploadRoutes from './routes/upload.js'
 import seed from './seed.js'
 
 const fastify = Fastify({
@@ -48,6 +49,12 @@ await fastify.register(multipart, {
 const AVATAR_DIR = join(__dirname, '..', 'data', 'avatars')
 if (!existsSync(AVATAR_DIR)) {
   mkdirSync(AVATAR_DIR, { recursive: true })
+}
+
+// 文章图片存储目录
+const UPLOADS_DIR = join(__dirname, '..', 'data', 'article-images')
+if (!existsSync(UPLOADS_DIR)) {
+  mkdirSync(UPLOADS_DIR, { recursive: true })
 }
 
 // ==================== 错误处理 ====================
@@ -85,7 +92,8 @@ try {
   await fastify.register(profileRoutes)
   await fastify.register(adminRoutes)
   await fastify.register(operationLogRoutes)
-  fastify.log.info('13 组路由已注册')
+  await fastify.register(uploadRoutes)
+  fastify.log.info('14 组路由已注册')
 
   // 4. 头像静态文件服务
   const MIME_MAP = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' }
@@ -94,6 +102,18 @@ try {
     const filepath = join(AVATAR_DIR, filename)
     if (!existsSync(filepath)) {
       return reply.status(404).send({ message: '头像不存在' })
+    }
+    const buf = readFileSync(filepath)
+    reply.type(MIME_MAP[extname(filename).toLowerCase()] || 'application/octet-stream')
+    return reply.send(buf)
+  })
+
+  // 4b. 文章图片静态文件服务
+  fastify.get('/uploads/:filename', async (request, reply) => {
+    const filename = basename(request.params.filename)
+    const filepath = join(UPLOADS_DIR, filename)
+    if (!existsSync(filepath)) {
+      return reply.status(404).send({ message: '图片不存在' })
     }
     const buf = readFileSync(filepath)
     reply.type(MIME_MAP[extname(filename).toLowerCase()] || 'application/octet-stream')
