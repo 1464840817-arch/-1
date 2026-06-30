@@ -1,7 +1,7 @@
 <!-- src/views/NotificationView.vue -->
 <!-- 通知中心 — 展示评论/回复/点赞/收藏/分享/系统通知，点击跳转关联文章 -->
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { PhBell, PhChatCircle, PhHeart, PhStar, PhShare, PhUsers, PhMegaphone, PhArrowBendUpLeft, PhUpload, PhX, PhArrowLeft } from '@phosphor-icons/vue'
 import { useRouter } from 'vue-router'
 import { getNotifications, markAllAsRead, markAsRead, deleteMessage } from '../api/message.js'
@@ -209,8 +209,34 @@ const handleMarkAllRead = async () => {
 // ==================== 导航 ====================
 const goBack = () => { router.back() }
 
+// ==================== SSE 实时监听 ====================
+const sseOnNoti = inject('sseOn', null)
+let unlistenSSE = null
+
+if (sseOnNoti) {
+  unlistenSSE = sseOnNoti('new_notification', (data) => {
+    // 去重：避免重复添加
+    if (data.id && messages.value.some(m => m.id === data.id)) return
+    // 构造通知对象并 prepend
+    messages.value.unshift({
+      id: data.id,
+      type: data.notifyType,
+      sender: data.sender,
+      action: data.action,
+      content: data.content,
+      targetId: data.targetId,
+      time: data.time,
+      date: data.date,
+      unread: data.unread !== false,
+    })
+  })
+}
+
 onMounted(() => { loadMessages() })
-onUnmounted(() => { cancelLongPress() })
+onUnmounted(() => {
+  cancelLongPress()
+  if (unlistenSSE) unlistenSSE()
+})
 </script>
 
 <template>
@@ -308,7 +334,7 @@ onUnmounted(() => { cancelLongPress() })
 <style scoped>
 /* ==================== 整体 ==================== */
 .notification-page {
-  min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   background: var(--color-bg-page);
   padding-bottom: 20px;
 }
@@ -333,20 +359,28 @@ onUnmounted(() => { cancelLongPress() })
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  z-index: 1; /* 在标题上方，确保可点击 */
 }
 .back-icon { display: block; flex-shrink: 0; }
 .header-center {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none; /* 让点击穿透到下层 */
 }
 .header-title {
   font-size: 18px;
   font-weight: 600;
   color: var(--color-text-primary);
   margin: 0;
+  white-space: nowrap;
 }
 .unread-badge {
+  position: absolute;
+  left: 100%;
+  margin-left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -402,8 +436,17 @@ onUnmounted(() => { cancelLongPress() })
 .empty-hint { font-size: 14px; color: var(--color-text-tertiary); margin: 0; max-width: 260px; line-height: 1.6; }
 
 /* ==================== 管理模式 Header ==================== */
-.cancel-btn { font-size: 15px; color: var(--color-primary); font-weight: 500; cursor: pointer; }
-.title { font-size: 16px; font-weight: 600; color: var(--color-text-primary); }
+.cancel-btn { font-size: 15px; color: var(--color-primary); font-weight: 500; cursor: pointer; z-index: 1; }
+.title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  pointer-events: none;
+}
 .batch-delete-btn {
   font-size: 14px; font-weight: 500;
   color: var(--color-error);
@@ -414,6 +457,7 @@ onUnmounted(() => { cancelLongPress() })
   cursor: pointer;
   font-family: inherit;
   transition: all 0.2s;
+  z-index: 1;
 }
 .batch-delete-btn:active:not(:disabled) { background: var(--color-error-bg); transform: scale(0.96); }
 .batch-delete-btn:disabled { opacity: 0.35; cursor: not-allowed; }

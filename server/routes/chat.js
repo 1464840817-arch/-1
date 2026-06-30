@@ -3,6 +3,7 @@
 
 import { queryAll, queryOne, execute } from '../db.js'
 import { authGuard } from '../middleware/auth.js'
+import { publish } from '../sse.js'
 
 const DEFAULT_LIMIT = 30
 const MAX_LIMIT = 100
@@ -12,7 +13,15 @@ export default async function chatRoutes(fastify) {
    * GET /chat/:friendId?before=&limit=
    * 获取当前用户与指定好友的双向聊天记录
    */
-  fastify.get('/chat/:friendId', { preHandler: authGuard }, async (request, reply) => {
+  fastify.get('/chat/:friendId', async (request, reply) => {
+    // 浏览器页面导航 → 返回 SPA 入口（不要求认证）
+    if ((request.headers.accept || '').includes('text/html')) {
+      return reply.sendFile('index.html')
+    }
+    // API 调用需要认证
+    await authGuard(request, reply)
+    if (reply.sent) return
+
     const friendId = parseInt(request.params.friendId, 10)
     const { before, limit: limitStr } = request.query
     const limit = Math.min(Math.max(parseInt(limitStr, 10) || DEFAULT_LIMIT, 1), MAX_LIMIT)
@@ -55,13 +64,25 @@ export default async function chatRoutes(fastify) {
     )
 
     // 按时间正序排列
-    const list = rows.reverse().map(r => ({
-      id: r.id,
-      fromMe: r.target_id === uid,
-      content: r.content,
-      time: formatTime(r.created_at),
-      date: r.created_at,
-    }))
+    const list = rows.reverse().map(r => {
+      // 解析文章名片
+      let cardData = null
+      try {
+        const parsed = JSON.parse(r.content)
+        if (parsed.cardType === 'article') {
+          cardData = parsed
+        }
+      } catch {}
+
+      return {
+        id: r.id,
+        fromMe: r.target_id === uid,
+        content: r.content,
+        cardData,
+        time: formatTime(r.created_at),
+        date: r.created_at,
+      }
+    })
 
     return { list, hasMore }
   })
@@ -106,7 +127,19 @@ export default async function chatRoutes(fastify) {
       [request.user.userId],
     )
 
-    return { ok: true, id: msgId, time: formatTime(new Date().toISOString()) }
+    // SSE 实时推送：通知接收方有新消息
+    const now = new Date().toISOString()
+    publish(friendId, {
+      type: 'new_message',
+      msgId,
+      senderId: request.user.userId,
+      sender: request.user.name,
+      content: content.trim(),
+      time: formatTime(now),
+      date: now,
+    })
+
+    return { ok: true, id: msgId, time: formatTime(now) }
   })
 }
 

@@ -2,6 +2,7 @@
 // 认证相关 API — 登录、登出、token 刷新
 // 后续对接后端时，确认接口路径和请求/响应字段即可
 import { request } from './client.js'
+import { userStore } from '../store/user.js'
 
 /**
  * 账号密码登录
@@ -28,7 +29,10 @@ export function logout() {
  * @returns {Promise<{ token: string }>}
  */
 export function refreshToken() {
-  return request('/auth/refresh', { method: 'POST' })
+  return request('/auth/refresh', {
+    method: 'POST',
+    body: { refreshToken: userStore.refreshToken },
+  })
 }
 
 // ==================== 账号管理（管理员及以上） ====================

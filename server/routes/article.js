@@ -3,6 +3,18 @@
 
 import { queryAll, queryOne, execute } from '../db.js'
 import { authGuard, optionalAuth } from '../middleware/auth.js'
+import { publish } from '../sse.js'
+
+function formatTime(dateStr) {
+  try {
+    const d = new Date(dateStr)
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    return `${hh}:${mm}`
+  } catch {
+    return dateStr || ''
+  }
+}
 
 export default async function articleRoutes(fastify) {
   // ==================== 文章 CRUD ====================
@@ -135,6 +147,18 @@ export default async function articleRoutes(fastify) {
         [userId, id],
       )
       execute('UPDATE articles SET likes = MAX(0, likes - 1) WHERE id = ?', [id])
+
+      // 同时删除对应的点赞通知，以便重新点赞时能再次通知
+      if (article.author !== request.user.name && article.author !== request.user.account) {
+        const authorUser = queryOne('SELECT id FROM users WHERE name = ?', [article.author])
+        if (authorUser) {
+          execute(
+            "DELETE FROM messages WHERE user_id = ? AND type = 'like' AND sender = ? AND target_id = ?",
+            [authorUser.id, request.user.name, id],
+          )
+        }
+      }
+
       const row = queryOne('SELECT likes FROM articles WHERE id = ?', [id])
       return { liked: false, likes: row.likes }
     }
@@ -161,6 +185,23 @@ export default async function articleRoutes(fastify) {
              VALUES (?, 'like', ?, '赞了你的文章', ?, ?)`,
             [authorUser.id, request.user.name, article.title, id],
           )
+
+          // SSE 实时推送
+          const { id: notifyId } = queryOne('SELECT last_insert_rowid() AS id') || {}
+          const now = new Date().toISOString()
+          publish(authorUser.id, {
+            type: 'new_notification',
+            id: notifyId,
+            notifyType: 'like',
+            sender: request.user.name,
+            senderAccount: request.user.account || '',
+            action: '赞了你的文章',
+            content: article.title,
+            targetId: id,
+            time: '刚刚',
+            date: now,
+            unread: true,
+          })
         }
       }
     }
@@ -170,11 +211,11 @@ export default async function articleRoutes(fastify) {
 
   /**
    * POST /articles/:id/share
-   * 分享文章给好友（需登录，向好友发送消息通知）
+   * 分享文章给好友 — 通过私聊发送文章名片
    */
   fastify.post('/articles/:id/share', { preHandler: authGuard }, async (request, reply) => {
     const id = parseInt(request.params.id, 10)
-    const article = queryOne('SELECT id, title FROM articles WHERE id = ?', [id])
+    const article = queryOne('SELECT id, title, type, "desc", author FROM articles WHERE id = ?', [id])
     if (!article) {
       return reply.status(404).send({ message: '文章不存在' })
     }
@@ -194,13 +235,38 @@ export default async function articleRoutes(fastify) {
       return reply.status(404).send({ message: '好友不存在' })
     }
 
+    // 构建文章名片 JSON → 作为私聊消息发送
+    const cardContent = JSON.stringify({
+      cardType: 'article',
+      articleId: article.id,
+      title: article.title,
+      type: article.type || '文章',
+      author: article.author,
+      desc: (article.desc || '').slice(0, 100),
+    })
+
     execute(
       `INSERT INTO messages (user_id, type, sender, action, content, target_id)
-       VALUES (?, 'share', ?, '分享了一篇文章给你', ?, ?)`,
-      [friendId, request.user.name, article.title, id],
+       VALUES (?, 'chat', ?, '分享了一篇文章', ?, ?)`,
+      [friendId, request.user.name, cardContent, request.user.userId],
     )
 
-    return { ok: true }
+    // 获取实际插入的消息 ID
+    const { id: msgId } = queryOne('SELECT last_insert_rowid() AS id') || {}
+
+    // SSE 实时推送：通知接收方有新消息（文章分享）
+    const now = new Date().toISOString()
+    publish(friendId, {
+      type: 'new_message',
+      msgId,
+      senderId: request.user.userId,
+      sender: request.user.name,
+      content: cardContent,
+      time: formatTime(now),
+      date: now,
+    })
+
+    return { ok: true, id: msgId }
   })
 
   /**
@@ -500,6 +566,23 @@ export default async function articleRoutes(fastify) {
            VALUES (?, 'comment', ?, '评论了你的文章', ?, ?)`,
           [authorUser.id, request.user.name, content.trim().slice(0, 100), articleId],
         )
+
+        // SSE 实时推送
+        const { id: notifyId } = queryOne('SELECT last_insert_rowid() AS id') || {}
+        const now = new Date().toISOString()
+        publish(authorUser.id, {
+          type: 'new_notification',
+          id: notifyId,
+          notifyType: 'comment',
+          sender: request.user.name,
+          senderAccount: request.user.account || '',
+          action: '评论了你的文章',
+          content: content.trim().slice(0, 100),
+          targetId: articleId,
+          time: '刚刚',
+          date: now,
+          unread: true,
+        })
       }
     }
 
@@ -514,6 +597,23 @@ export default async function articleRoutes(fastify) {
              VALUES (?, 'comment', ?, '回复了你的评论', ?, ?)`,
             [replyTargetUser.id, request.user.name, content.trim().slice(0, 100), articleId],
           )
+
+          // SSE 实时推送
+          const { id: notifyId } = queryOne('SELECT last_insert_rowid() AS id') || {}
+          const now = new Date().toISOString()
+          publish(replyTargetUser.id, {
+            type: 'new_notification',
+            id: notifyId,
+            notifyType: 'reply',
+            sender: request.user.name,
+            senderAccount: request.user.account || '',
+            action: '回复了你的评论',
+            content: content.trim().slice(0, 100),
+            targetId: articleId,
+            time: '刚刚',
+            date: now,
+            unread: true,
+          })
         }
       }
     }

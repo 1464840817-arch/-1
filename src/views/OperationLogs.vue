@@ -143,7 +143,7 @@ function roleClass(role) {
 
 <style scoped>
 .log-page {
-  min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   background: var(--color-bg-page, #f5f5f5);
 }
 

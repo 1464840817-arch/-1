@@ -9,7 +9,7 @@ import { searchArticles } from '../api/search.js'
 import { toggleCollect as toggleCollectStore, isCollected, addHistory, currentIsAdmin } from '../store/user.js'
 import { friendStore, initFriendData } from '../store/friends.js'
 import { request } from '../api/client.js'
-import { PhArrowLeft, PhHeart, PhChatCircle, PhStar, PhShare, PhEye, PhTrash, PhWarning, PhNotePencil, PhLink, PhUser, PhX, PhFileText, PhNotepad, PhWrench, PhPaperclip, PhSmileySad, PhCaretLeft, PhCaretRight, PhImage } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhHeart, PhChatCircle, PhStar, PhShare, PhEye, PhTrash, PhWarning, PhNotePencil, PhLink, PhUser, PhX, PhFileText, PhNotepad, PhWrench, PhPaperclip, PhSmileySad, PhCaretLeft, PhCaretRight, PhImage, PhPaperPlaneTilt } from '@phosphor-icons/vue'
 import { formatDateTime } from '../utils/date.js'
 
 const router = useRouter()
@@ -467,6 +467,15 @@ onUnmounted(() => {
       </div>
       <span class="header-title">文章详情</span>
       <div class="header-right">
+        <!-- 分享按钮 — 所有用户可见 -->
+        <button
+          class="header-share-btn"
+          aria-label="分享文章"
+          @click="openShareSheet"
+        >
+          <PhShare :size="18" />
+        </button>
+        <!-- 管理员管理菜单 -->
         <div v-if="isAdmin" ref="menuRef" class="admin-menu-wrapper">
           <button
             class="admin-menu-btn"
@@ -733,7 +742,9 @@ onUnmounted(() => {
                       aria-label="输入回复内容"
                       @keyup.enter="submitReply(comment)"
                     />
-                    <button class="reply-send-btn" @click="submitReply(comment)">发送</button>
+                    <button class="reply-send-btn" @click="submitReply(comment)" aria-label="发送回复">
+                      <PhPaperPlaneTilt :size="14" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -905,6 +916,14 @@ onUnmounted(() => {
           @keyup.enter="submitComment"
         />
       </div>
+      <button
+        class="comment-send-btn"
+        :disabled="!newComment.trim()"
+        @click="submitComment"
+        aria-label="发送评论"
+      >
+        <PhPaperPlaneTilt :size="18" />
+      </button>
       <div class="action-icons">
         <div class="icon-btn" role="button" tabindex="0" aria-label="点赞" @click="toggleLike" @keydown.enter.prevent="toggleLike" @keydown.space.prevent="toggleLike">
           <PhHeart :size="20" :weight="articleData.isLiked ? 'fill' : 'regular'" />
@@ -921,7 +940,7 @@ onUnmounted(() => {
 <style scoped>
 /* ==================== 页面容器 ==================== */
 .detail-page {
-  min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   background-color: var(--color-bg-page);
   display: flex;
   flex-direction: column;
@@ -955,6 +974,27 @@ onUnmounted(() => {
   align-items: center;
   justify-content: flex-end;
   min-width: 48px;
+  gap: 4px;
+}
+
+/* 头部分享按钮 */
+.header-share-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.header-share-btn:hover,
+.header-share-btn:active {
+  color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 
 /* ==================== 内容区 ==================== */
@@ -1246,11 +1286,14 @@ onUnmounted(() => {
   color: #fff;
   border: none;
   border-radius: var(--radius-btn);
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 500;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  padding: 0;
   font-family: inherit;
 }
 .reply-send-btn:active { opacity: 0.8; }
@@ -1512,6 +1555,32 @@ onUnmounted(() => {
   font-family: inherit;
 }
 .comment-input::placeholder { color: var(--color-text-tertiary); }
+
+.comment-send-btn {
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  height: 44px;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.comment-send-btn:active:not(:disabled) {
+  opacity: 0.9;
+}
+.comment-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .action-icons {
   display: flex;
   gap: 16px;

@@ -1,12 +1,13 @@
 <!-- src/views/ChatView.vue -->
 <!-- 私聊页面 — 与好友一对一聊天 -->
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { PhArrowLeft, PhPaperPlaneTilt, PhChatCircle, PhSmileySad } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhPaperPlaneTilt, PhChatCircle, PhSmileySad, PhPlus, PhImage, PhCamera, PhX } from '@phosphor-icons/vue'
 import { getUserProfile } from '../api/user.js'
 import { getChatHistory, sendChatMessage } from '../api/chat.js'
 import { userStore } from '../store/user.js'
+import { request } from '../api/client.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -65,6 +66,78 @@ const loadMessages = async () => {
 const inputText = ref('')
 const sending = ref(false)
 const messagesContainer = ref(null)
+
+// ==================== 附件面板 ====================
+const showAttachSheet = ref(false)
+const uploading = ref(false)
+const imageInputRef = ref(null)
+const cameraInputRef = ref(null)
+
+const toggleAttachSheet = () => {
+  showAttachSheet.value = !showAttachSheet.value
+}
+
+const closeAttachSheet = () => {
+  showAttachSheet.value = false
+}
+
+const pickImage = () => {
+  closeAttachSheet()
+  imageInputRef.value?.click()
+}
+
+const takePhoto = () => {
+  closeAttachSheet()
+  cameraInputRef.value?.click()
+}
+
+const handleImageUpload = async (event) => {
+  const file = event.target?.files?.[0]
+  if (!file) return
+
+  uploading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const result = await request('/api/upload', { method: 'POST', body: formData })
+    const imageUrl = result?.images?.[0]?.url
+    if (imageUrl) {
+      // 将图片作为消息发送
+      const tempId = -Date.now()
+      messages.value.push({
+        _key: tempId,
+        id: tempId,
+        fromMe: true,
+        content: imageUrl,
+        imageUrl,
+        time: formatCurrentTime(),
+      })
+      await scrollToBottom()
+
+      try {
+        const res = await sendChatMessage(friendId.value, `[image:${imageUrl}]`)
+        const idx = messages.value.findIndex(m => m._key === tempId)
+        if (idx >= 0) {
+          messages.value[idx].id = res.id
+          messages.value[idx]._key = res.id
+          messages.value[idx].time = res.time
+        }
+      } catch {
+        const idx = messages.value.findIndex(m => m._key === tempId)
+        if (idx >= 0) {
+          messages.value[idx].failed = true
+        }
+        showToast('图片发送失败，请重试')
+      }
+    }
+  } catch (err) {
+    showToast('图片上传失败: ' + (err.message || '未知错误'))
+  } finally {
+    uploading.value = false
+    // 重置 file input，允许重复选择同一文件
+    event.target.value = ''
+  }
+}
 
 const handleSend = async () => {
   const text = inputText.value.trim()
@@ -161,7 +234,40 @@ const formatCurrentTime = () => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-/** 判断是否需要在两条消息之间插入时间分隔 */
+/** 解析消息内容：图片 / 文章名片 / 纯文本 */
+const parseMsgContent = (msg) => {
+  // 文章名片（服务端已解析 cardData）
+  if (msg.cardData && msg.cardData.cardType === 'article') {
+    const { type: articleType, ...rest } = msg.cardData
+    return { type: 'article_card', articleType, ...rest }
+  }
+  // 降级：尝试从 content 解析 JSON
+  try {
+    const parsed = JSON.parse(msg.content || '')
+    if (parsed.cardType === 'article') {
+      const { type: articleType, ...rest } = parsed
+      return { type: 'article_card', articleType, ...rest }
+    }
+  } catch {}
+  // 图片标记
+  const content = msg.content || ''
+  const imgMatch = content.match(/^\[image:(.+)\]$/)
+  if (imgMatch) {
+    return { type: 'image', url: imgMatch[1] }
+  }
+  // 从 imageUrl 字段来的图片
+  if (msg.imageUrl) {
+    return { type: 'image', url: msg.imageUrl }
+  }
+  return { type: 'text', text: content }
+}
+
+/** 点击文章名片 → 跳转文章详情 */
+const goToArticle = (articleId) => {
+  if (articleId) {
+    router.push(`/article/${articleId}`)
+  }
+}
 const showTimeSeparator = (msg, index) => {
   if (index === 0) return true
   const prev = messages.value[index - 1]
@@ -201,6 +307,29 @@ const formatMsgTime = (dateStr) => {
   }
 }
 
+// ==================== SSE 实时接收消息 ====================
+let unlistenSSE = null
+const sseOn = inject('sseOn', null)
+
+if (sseOn) {
+  unlistenSSE = sseOn('new_message', (data) => {
+    // 只处理来自当前聊天对象的消息
+    if (data.senderId !== friendId.value) return
+    // 去重：避免与已存在的消息重复
+    const dup = messages.value.some(m => m.id === data.msgId)
+    if (dup) return
+    messages.value.push({
+      _key: data.msgId ? `msg-${data.msgId}` : `sse-${Date.now()}`,
+      id: data.msgId || null,
+      fromMe: false,
+      content: data.content,
+      time: data.time,
+      date: data.date,
+    })
+    scrollToBottom()
+  })
+}
+
 // ==================== 生命周期 ====================
 onMounted(async () => {
   await loadFriend()
@@ -212,6 +341,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   clearTimeout(toastTimer)
+  if (unlistenSSE) unlistenSSE()
 })
 </script>
 
@@ -303,16 +433,40 @@ onUnmounted(() => {
 
         <!-- 对方消息 -->
         <div v-if="!msg.fromMe" class="msg-row msg-other">
-          <div class="msg-bubble other">
-            <span class="msg-text">{{ msg.content }}</span>
+          <div class="msg-bubble other" :class="{ 'card-bubble': parseMsgContent(msg).type === 'article_card' }">
+            <!-- 文章名片 -->
+            <div v-if="parseMsgContent(msg).type === 'article_card'" class="msg-card article-card" role="button" tabindex="0" @click="goToArticle(parseMsgContent(msg).articleId)" @keydown.enter.prevent="goToArticle(parseMsgContent(msg).articleId)" @keydown.space.prevent="goToArticle(parseMsgContent(msg).articleId)">
+              <div class="card-header">
+                <span class="card-type-tag">{{ parseMsgContent(msg).articleType || '文章' }}</span>
+                <span class="card-hint">点击查看详情 ›</span>
+              </div>
+              <span class="card-title">{{ parseMsgContent(msg).title }}</span>
+              <span class="card-meta">{{ parseMsgContent(msg).author }} · {{ parseMsgContent(msg).desc }}</span>
+            </div>
+            <!-- 图片消息 -->
+            <img v-else-if="parseMsgContent(msg).type === 'image'" :src="parseMsgContent(msg).url" class="msg-image" alt="图片消息" loading="lazy" />
+            <!-- 文本消息 -->
+            <span v-else class="msg-text">{{ parseMsgContent(msg).text }}</span>
             <span v-if="msg.failed" class="msg-failed-hint">发送失败</span>
           </div>
         </div>
 
         <!-- 我的消息 -->
         <div v-else class="msg-row msg-mine">
-          <div class="msg-bubble mine" :class="{ failed: msg.failed }">
-            <span class="msg-text">{{ msg.content }}</span>
+          <div class="msg-bubble mine" :class="{ failed: msg.failed, 'card-bubble': parseMsgContent(msg).type === 'article_card' }">
+            <!-- 文章名片 -->
+            <div v-if="parseMsgContent(msg).type === 'article_card'" class="msg-card article-card" role="button" tabindex="0" @click="goToArticle(parseMsgContent(msg).articleId)" @keydown.enter.prevent="goToArticle(parseMsgContent(msg).articleId)" @keydown.space.prevent="goToArticle(parseMsgContent(msg).articleId)">
+              <div class="card-header">
+                <span class="card-type-tag">{{ parseMsgContent(msg).articleType || '文章' }}</span>
+                <span class="card-hint">点击查看详情 ›</span>
+              </div>
+              <span class="card-title">{{ parseMsgContent(msg).title }}</span>
+              <span class="card-meta">{{ parseMsgContent(msg).author }} · {{ parseMsgContent(msg).desc }}</span>
+            </div>
+            <!-- 图片消息 -->
+            <img v-else-if="parseMsgContent(msg).type === 'image'" :src="parseMsgContent(msg).url" class="msg-image" alt="图片消息" loading="lazy" />
+            <!-- 文本消息 -->
+            <span v-else class="msg-text">{{ parseMsgContent(msg).text }}</span>
           </div>
           <span v-if="msg.failed" class="msg-retry" role="button" @click="handleRetry(idx)">重试</span>
         </div>
@@ -330,6 +484,16 @@ onUnmounted(() => {
         aria-label="消息输入"
         @keydown.enter.exact.prevent="handleSend"
       ></textarea>
+
+      <button
+        class="attach-btn"
+        :class="{ active: showAttachSheet }"
+        @click="toggleAttachSheet"
+        aria-label="添加附件"
+      >
+        <PhPlus :size="20" />
+      </button>
+
       <button
         class="send-btn"
         :disabled="!inputText.trim() || sending"
@@ -337,9 +501,47 @@ onUnmounted(() => {
         aria-label="发送消息"
       >
         <PhPaperPlaneTilt v-if="!sending" :size="18" />
-        <span v-else>…</span>
+        <span v-else class="btn-spinner"></span>
       </button>
     </div>
+
+    <!-- ==================== 附件选择面板 ==================== -->
+    <teleport to="body">
+      <transition name="sheet">
+        <div v-if="showAttachSheet" class="attach-overlay" role="dialog" aria-modal="true" aria-label="选择附件类型" @click.self="closeAttachSheet">
+          <div class="attach-sheet">
+            <button class="attach-sheet-item" @click="pickImage">
+              <span class="attach-sheet-icon"><PhImage :size="28" /></span>
+              <span class="attach-sheet-label">图片</span>
+              <span class="attach-sheet-desc">从相册中选择</span>
+            </button>
+            <button class="attach-sheet-item" @click="takePhoto">
+              <span class="attach-sheet-icon"><PhCamera :size="28" /></span>
+              <span class="attach-sheet-label">拍摄</span>
+              <span class="attach-sheet-desc">使用相机拍照</span>
+            </button>
+            <button class="attach-cancel-btn" @click="closeAttachSheet">取消</button>
+          </div>
+        </div>
+      </transition>
+    </teleport>
+
+    <!-- 隐藏的文件选择器 -->
+    <input
+      ref="imageInputRef"
+      type="file"
+      accept="image/*"
+      class="hidden-file-input"
+      @change="handleImageUpload"
+    />
+    <input
+      ref="cameraInputRef"
+      type="file"
+      accept="image/*"
+      capture="environment"
+      class="hidden-file-input"
+      @change="handleImageUpload"
+    />
 
     <!-- ==================== Toast ==================== -->
     <div v-if="toastText" class="toast-bar" role="alert">{{ toastText }}</div>
@@ -350,8 +552,8 @@ onUnmounted(() => {
 <style scoped>
 /* ==================== 页面容器 ==================== */
 .chat-page {
-  min-height: 100vh;
-  height: 100vh;
+  min-height: var(--app-height, 100dvh);
+  height: var(--app-height, 100dvh);
   background: var(--color-bg-page);
   display: flex;
   flex-direction: column;
@@ -652,6 +854,49 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
+.btn-spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
+}
+
+/* "+" 附件按钮 */
+.attach-btn {
+  background: transparent;
+  color: var(--color-text-tertiary);
+  border: none;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  height: 44px;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.attach-btn:active,
+.attach-btn.active {
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+/* 消息中的图片 */
+.msg-image {
+  display: block;
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  object-fit: cover;
+  cursor: pointer;
+}
+
 /* ==================== Toast ==================== */
 .toast-bar {
   position: fixed;
@@ -671,5 +916,170 @@ onUnmounted(() => {
 @keyframes toast-in {
   from { opacity: 0; transform: translateX(-50%) translateY(8px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ==================== 附件选择面板 ==================== */
+.attach-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: rgba(15,23,42,0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.attach-sheet {
+  width: 100%;
+  max-width: 500px;
+  background: var(--color-bg-card);
+  border-radius: 16px 16px 0 0;
+  padding: 20px 16px 28px;
+  animation: sheet-up 0.25s ease;
+}
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.attach-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  border-radius: var(--radius-card);
+  transition: background 0.15s;
+}
+.attach-sheet-item:hover,
+.attach-sheet-item:active {
+  background: var(--color-bg-page);
+}
+.attach-sheet-item + .attach-sheet-item {
+  border-top: 1px solid var(--color-divider);
+}
+.attach-sheet-icon {
+  display: flex;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+  width: 44px;
+  justify-content: center;
+}
+.attach-sheet-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+}
+.attach-sheet-desc {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-left: auto;
+}
+.attach-cancel-btn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px;
+  border: none;
+  border-radius: var(--radius-card);
+  background: var(--color-divider);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.attach-cancel-btn:hover {
+  background: var(--color-border);
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+/* 面板动画 */
+.sheet-enter-active,
+.sheet-leave-active {
+  transition: opacity 0.25s ease;
+}
+.sheet-enter-active .attach-sheet,
+.sheet-leave-active .attach-sheet {
+  transition: transform 0.25s ease;
+}
+.sheet-enter-from,
+.sheet-leave-to {
+  opacity: 0;
+}
+.sheet-enter-from .attach-sheet {
+  transform: translateY(100%);
+}
+.sheet-leave-to .attach-sheet {
+  transform: translateY(100%);
+}
+
+/* ==================== 文章名片消息 ==================== */
+.card-bubble {
+  padding: 0 !important;
+  overflow: hidden;
+  background: var(--color-bg-card) !important;
+}
+.msg-bubble.mine.card-bubble {
+  background: var(--color-bg-card) !important;
+  border: 1px solid var(--color-primary);
+}
+
+.msg-card.article-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  cursor: pointer;
+  min-width: 200px;
+  max-width: 260px;
+  transition: background 0.15s;
+}
+.msg-card.article-card:active {
+  background: var(--color-bg-page);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-type-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  padding: 2px 8px;
+  border-radius: var(--radius-tag);
+}
+.card-hint {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card-meta {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

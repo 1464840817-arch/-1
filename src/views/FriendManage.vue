@@ -538,7 +538,7 @@ const cancelDelete = () => {
 <style scoped>
 /* ==================== 页面容器 ==================== */
 .friend-page {
-  min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   background: var(--color-bg-page);
   padding-bottom: 40px;
 }

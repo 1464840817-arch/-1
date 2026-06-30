@@ -204,7 +204,7 @@ onMounted(() => {
 
 <style scoped>
 .admin-page {
-  min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   background: var(--color-bg-page);
   padding-bottom: 40px;
 }

@@ -280,7 +280,7 @@ onUnmounted(() => {
 <style scoped>
 /* ==================== 页面容器 ==================== */
 .user-detail-page {
-  min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   background: var(--color-bg-page);
   padding-bottom: 40px;
 }

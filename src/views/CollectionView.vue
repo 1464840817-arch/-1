@@ -149,7 +149,7 @@ const goToDetail = (id) => router.push(`/article/${id}`)
 
 <style scoped>
 .collection-page {
-  min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   background: var(--color-bg-page);
   padding-bottom: 20px;
 }

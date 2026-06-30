@@ -268,7 +268,7 @@ const handleLogout = () => {
 /* ==================== 页面容器 ==================== */
 .profile-view {
   background-color: var(--color-bg-page);
-  min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   padding: 16px;
   padding-bottom: 80px;
   max-width: 720px;

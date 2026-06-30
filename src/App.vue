@@ -7,6 +7,7 @@ import ToastMessage from './components/ToastMessage.vue'
 import { initUserData, userStore } from './store/user.js'
 import { loadFriendRequests } from './store/friends.js'
 import { loadUnreadCount } from './store/messages.js'
+import { useSSE } from './composables/useSSE.js'
 
 const route = useRoute()
 
@@ -18,6 +19,10 @@ const hideBottomNavOverlay = ref(false)
 provide('setHideBottomNav', (val) => { hideBottomNavOverlay.value = val })
 
 const showBottomNav = computed(() => !hideNavRoutes.includes(route.name) && !hideBottomNavOverlay.value)
+
+// SSE 实时推送 — 登录后自动连接，退出时断开
+const sse = useSSE()
+provide('sseOn', sse.on)
 
 // Toast 全局方法 — 通过 provide 注入给所有子组件
 const toastRef = ref(null)
@@ -39,6 +44,17 @@ onMounted(() => {
   refreshBadgeCounts()
   // 页面从后台恢复时（用户切回标签页 / 手机从锁屏唤醒），刷新红点数据
   document.addEventListener('visibilitychange', onVisibilityChange)
+
+  // 移动端键盘适配：用 visualViewport 锁定可视高度，防止键盘挤压页面
+  if (window.visualViewport) {
+    const setAppHeight = () => {
+      const vh = window.visualViewport.height
+      document.documentElement.style.setProperty('--app-height', `${vh}px`)
+    }
+    window.visualViewport.addEventListener('resize', setAppHeight)
+    window.visualViewport.addEventListener('scroll', setAppHeight)
+    setAppHeight()
+  }
 })
 
 onUnmounted(() => {
@@ -76,7 +92,16 @@ watch(() => userStore.isLoggedIn, (loggedIn) => {
 </template>
 
 <style>
-body { margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; background-color: var(--color-bg-page); }
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100%;
+}
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: var(--color-bg-page);
+}
 
 /* 桌面端阅读线宽约束 — 各页面内容区可按需使用 */
 .page-content {
@@ -96,5 +121,15 @@ button:active:not(:disabled) { opacity: 0.9; }
 </style>
 
 <style scoped>
-.app-container { min-height: 100vh; }
+.app-container {
+  height: var(--app-height, 100dvh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#main-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 </style>

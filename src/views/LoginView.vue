@@ -1,11 +1,12 @@
 <!-- src/views/LoginView.vue -->
 <!-- 登录页面 — 极简企业级设计，适配移动端 -->
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { login } from '../api/auth.js'
 import { userStore, setLoginState } from '../store/user.js'
 import { SEED_SUPER_ADMIN, ROLES } from '../store/auth.js'
+import { getTenantConfig } from '../api/tenant.js'
 import { PhWarning } from '@phosphor-icons/vue'
 
 const router = useRouter()
@@ -17,6 +18,19 @@ const password = ref('')
 const showPassword = ref(false)
 const submitting = ref(false)
 const errorMsg = ref('')
+
+// ==================== 品牌区域（从系统配置动态加载） ====================
+const brandName = ref('工控技术库')
+const brandSubtitle = ref('经验沉淀 · 故障智搜')
+const brandLogo = ref('')
+
+onMounted(() => {
+  getTenantConfig().then(config => {
+    brandName.value = config.name || '工控技术库'
+    brandSubtitle.value = config.subtitle || '经验沉淀 · 故障智搜'
+    brandLogo.value = config.logoUrl || ''
+  }).catch(() => {})
+})
 
 // 按钮是否可点击
 const canSubmit = computed(() => {
@@ -82,6 +96,7 @@ const handleLogin = async () => {
       setLoginState({
         name: result.name || account.value.trim(),
         token: result.token,
+        refreshToken: result.refreshToken || '',
         role: result.role || '',
         account: result.account || account.value.trim(),
         avatar: result.avatar || '',
@@ -133,8 +148,10 @@ const handleKeyup = (e) => {
 
     <!-- ==================== 1. 品牌 Logo 区域 ==================== -->
     <div class="brand-area">
-      <!-- 齿轮/电路 SVG 图标 -->
-      <svg class="brand-icon" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- 已上传 Logo：显示图片 -->
+      <img v-if="brandLogo" :src="brandLogo" class="brand-logo-img" alt="平台 Logo" />
+      <!-- 未上传：显示默认靶心 SVG 图标 -->
+      <svg v-else class="brand-icon" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
         <!-- 外圈齿轮 -->
         <circle cx="40" cy="40" r="34" stroke="var(--color-primary)" stroke-width="3" fill="none" />
         <!-- 齿轮齿 (8个) -->
@@ -164,8 +181,8 @@ const handleKeyup = (e) => {
         <circle cx="40" cy="40" r="3" fill="#fff" />
       </svg>
 
-      <h1 id="brand-title" class="brand-title">工控技术库</h1>
-      <p class="brand-subtitle">经验沉淀 · 故障智搜</p>
+      <h1 id="brand-title" class="brand-title">{{ brandName }}</h1>
+      <p class="brand-subtitle">{{ brandSubtitle }}</p>
     </div>
 
     <!-- ==================== 2. 核心表单区域 ==================== -->
@@ -278,7 +295,7 @@ const handleKeyup = (e) => {
 <style scoped>
 /* ==================== 整体布局 ==================== */
 .login-page {
-  min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   min-height: 100dvh;
   background: var(--color-bg-card);
   display: flex;
@@ -295,6 +312,15 @@ const handleKeyup = (e) => {
   align-items: center;
   padding-top: 80px;
   margin-bottom: 48px;
+}
+
+/* 已上传 Logo 图片 */
+.brand-logo-img {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  object-fit: contain;
+  margin-bottom: 16px;
 }
 
 .brand-icon {

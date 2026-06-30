@@ -102,3 +102,27 @@ export function updateProfileVisibility(data) {
     body: data,
   })
 }
+
+// ==================== 平台 Logo 上传 ====================
+
+/**
+ * 上传平台 Logo（FormData，覆盖旧文件）
+ * @param {FormData} formData - 包含 logo 文件的 FormData
+ * @returns {Promise<{ok:boolean, url:string}>}
+ */
+export function uploadLogo(formData) {
+  return request('/api/upload/logo', {
+    method: 'POST',
+    body: formData,
+  })
+}
+
+/**
+ * 删除平台 Logo，恢复为默认图标
+ * @returns {Promise<{ok:boolean}>}
+ */
+export function deleteLogo() {
+  return request('/api/upload/logo', {
+    method: 'DELETE',
+  })
+}

@@ -38,6 +38,7 @@ export default async function tenantRoutes(fastify) {
       return {
         id: 0,
         name: '工控技术库',
+        subtitle: '经验沉淀 · 故障智搜',
         orgType: '企业',
         categoryTags: tags,
         departments: [],
@@ -48,6 +49,7 @@ export default async function tenantRoutes(fastify) {
     return {
       id: config.id,
       name: config.name,
+      subtitle: config.subtitle || '经验沉淀 · 故障智搜',
       orgType: config.org_type,
       logoUrl: config.logo_url,
       categoryTags: tags,
@@ -60,10 +62,11 @@ export default async function tenantRoutes(fastify) {
    * 更新租户全局配置（超管）
    */
   fastify.put('/tenant/config', { preHandler: [authGuard, adminGuard] }, async (request, reply) => {
-    const { name, logoUrl } = request.body || {}
+    const { name, subtitle, logoUrl } = request.body || {}
 
-    execute('INSERT OR REPLACE INTO tenant_config (id, name, logo_url) VALUES (1, ?, ?)', [
+    execute('INSERT OR REPLACE INTO tenant_config (id, name, subtitle, logo_url) VALUES (1, ?, ?, ?)', [
       name || '工控技术库',
+      subtitle || '经验沉淀 · 故障智搜',
       logoUrl || '',
     ])
 
@@ -206,7 +209,7 @@ export default async function tenantRoutes(fastify) {
     fullConfig.profileVisibility = existing
 
     execute(
-      "INSERT OR REPLACE INTO tenant_config (id, name, org_type, logo_url, config_json, updated_at) VALUES (1, '工控技术库', '企业', '', ?, datetime('now','localtime'))",
+      "INSERT OR REPLACE INTO tenant_config (id, name, subtitle, org_type, logo_url, config_json, updated_at) VALUES (1, (SELECT COALESCE(name,'工控技术库') FROM tenant_config WHERE id=1), (SELECT COALESCE(subtitle,'经验沉淀 · 故障智搜') FROM tenant_config WHERE id=1), (SELECT COALESCE(org_type,'企业') FROM tenant_config WHERE id=1), (SELECT COALESCE(logo_url,'') FROM tenant_config WHERE id=1), ?, datetime('now','localtime'))",
       [JSON.stringify(fullConfig)],
     )
 

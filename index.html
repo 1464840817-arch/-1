@@ -1,12 +1,61 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>my-ic-platform</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>工控技术库</title>
+    <style>
+      /* 首屏加载指示器 — Vue 挂载前可见 */
+      #app-loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #F8FAFC;
+        z-index: 99999;
+        font-family: system-ui, -apple-system, sans-serif;
+        transition: opacity 0.3s;
+      }
+      #app-loading.hide {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .loader-spin {
+        width: 36px;
+        height: 36px;
+        border: 3px solid #E2E8F0;
+        border-top-color: #2563EB;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        margin-bottom: 16px;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .loader-text {
+        font-size: 14px;
+        color: #64748B;
+      }
+      .loader-error {
+        display: none;
+        color: #EF4444;
+        font-size: 13px;
+        margin-top: 12px;
+        text-align: center;
+        max-width: 280px;
+        line-height: 1.5;
+      }
+      #app-loading.error .loader-spin { display: none; }
+      #app-loading.error .loader-error { display: block; }
+    </style>
   </head>
   <body>
+    <div id="app-loading">
+      <div class="loader-spin"></div>
+      <div class="loader-text">正在加载...</div>
+      <div class="loader-error">⚠️ 加载失败<br><small>请检查网络后刷新重试</small></div>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

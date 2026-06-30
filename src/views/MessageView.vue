@@ -1,7 +1,7 @@
 <!-- src/views/MessageView.vue -->
 <!-- 私聊列表 — 按联系人分组展示私信会话 + 顶部通知入口 -->
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { PhBell, PhChatCircle } from '@phosphor-icons/vue'
 import { useRouter } from 'vue-router'
 import { getChatMessages, getNotificationCount, markAllAsRead, markAsRead, deleteMessage } from '../api/message.js'
@@ -192,6 +192,22 @@ const goToNotifications = () => {
   router.push('/notifications')
 }
 
+// ==================== SSE 实时监听 ====================
+const sseOnMsg = inject('sseOn', null)
+let unlistenMsgSSE = null
+let unlistenNotiSSE = null
+
+if (sseOnMsg) {
+  // 新私聊消息 → 刷新会话列表
+  unlistenMsgSSE = sseOnMsg('new_message', () => {
+    loadChats()
+  })
+  // 新通知 → 更新通知未读红点
+  unlistenNotiSSE = sseOnMsg('new_notification', () => {
+    fetchNotiCount()
+  })
+}
+
 // ==================== 生命周期 ====================
 onMounted(() => {
   loadChats()
@@ -209,6 +225,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler)
+  if (unlistenMsgSSE) unlistenMsgSSE()
+  if (unlistenNotiSSE) unlistenNotiSSE()
 })
 </script>
 
@@ -358,7 +376,7 @@ onUnmounted(() => {
 <style scoped>
 /* ==================== 整体 ==================== */
 .chat-page {
-  min-height: 100vh;
+  min-height: var(--app-height, 100dvh);
   background: var(--color-bg-page);
   padding-bottom: 20px;
 }

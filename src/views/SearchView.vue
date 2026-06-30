@@ -2,7 +2,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getCategoryTags, addCategoryTag, deleteCategoryTag } from '../api/tenant.js'
+import { getCategoryTags, addCategoryTag, deleteCategoryTag, getTenantConfig } from '../api/tenant.js'
 import { getSearchHistory, addSearchHistory, clearSearchHistory } from '../api/searchHistory.js'
 import { searchArticles } from '../api/search.js'
 import { currentIsAdmin } from '../store/user.js'
@@ -14,6 +14,11 @@ const router = useRouter()
 
 // 从首页搜索框跳转过来时，URL 带有 ?q=xxx，自动填入搜索词
 const searchInput = ref(route.query.q || '')
+
+// ==================== 品牌区域 ====================
+const platformName = ref('工控技术库')
+const platformSubtitle = ref('经验沉淀 · 故障智搜')
+const platformLogo = ref('')
 
 // ==================== 搜索历史 ====================
 const MAX_HISTORY = 8
@@ -316,6 +321,12 @@ onMounted(() => {
   loadHistory()
   loadFilterData()
   autoSearch()
+  // 加载平台配置（名称 + Logo），失败静默降级为默认值
+  getTenantConfig().then(config => {
+    platformName.value = config.name || '工控技术库'
+    platformSubtitle.value = config.subtitle || '经验沉淀 · 故障智搜'
+    platformLogo.value = config.logoUrl || ''
+  }).catch(() => {})
   document.addEventListener('click', onClickOutside)
   // 从管理中心跳转过来时自动进入编辑模式（仅管理员及以上）
   if (route.query.admin === '1' && currentIsAdmin()) {
@@ -330,6 +341,37 @@ onUnmounted(() => {
 
 <template>
   <main class="search-view" :class="{ 'has-results': hasSearched }" aria-label="搜索页面">
+
+    <!-- 品牌区域（初始状态显示，搜索后隐藏以节省空间） -->
+    <div v-if="!hasSearched" class="brand-area">
+      <!-- 已上传 Logo：显示图片 -->
+      <img v-if="platformLogo" :src="platformLogo" class="brand-logo-img" alt="平台 Logo" />
+      <!-- 未上传：显示默认靶心图标（与登录页同款） -->
+      <svg v-else class="brand-logo-icon" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="40" cy="40" r="34" stroke="currentColor" stroke-width="2.5" fill="none" />
+        <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="40" y1="2"  x2="40" y2="10" />
+          <line x1="40" y1="70" x2="40" y2="78" />
+          <line x1="2"  y1="40" x2="10" y2="40" />
+          <line x1="70" y1="40" x2="78" y2="40" />
+          <line x1="13.1" y1="13.1" x2="18.8" y2="18.8" />
+          <line x1="61.2" y1="61.2" x2="66.9" y2="66.9" />
+          <line x1="66.9" y1="13.1" x2="61.2" y2="18.8" />
+          <line x1="18.8" y1="61.2" x2="13.1" y2="66.9" />
+        </g>
+        <circle cx="40" cy="40" r="18" stroke="currentColor" stroke-width="1.5" fill="none" opacity="0.5" />
+        <rect x="30" y="30" width="20" height="20" rx="3" fill="currentColor" opacity="0.85" />
+        <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="40" y1="21" x2="40" y2="28" />
+          <line x1="40" y1="52" x2="40" y2="59" />
+          <line x1="21" y1="40" x2="28" y2="40" />
+          <line x1="52" y1="40" x2="59" y2="40" />
+        </g>
+        <circle cx="40" cy="40" r="3" fill="#fff" />
+      </svg>
+      <h1 class="brand-name">{{ platformName }}</h1>
+      <p class="brand-subtitle">{{ platformSubtitle }}</p>
+    </div>
 
     <!-- 始终在顶部的搜索区域 -->
     <div class="search-header">
@@ -547,21 +589,66 @@ onUnmounted(() => {
 /* --- 整体容器 --- */
 .search-view {
   background-color: var(--color-bg-page);
-  min-height: calc(100vh - 65px);
+  min-height: calc(var(--app-height, 100dvh) - 65px);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 16px;
   box-sizing: border-box;
 }
 .search-view.has-results {
-  justify-content: flex-start;
   padding-bottom: 0;
 }
 
-/* --- 顶部搜索区域 --- */
+/* --- 顶部搜索区域（sticky 固定，状态切换不跳动） --- */
 .search-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-bg-page);
+  padding: 8px 0;
   flex-shrink: 0;
+}
+
+/* ==================== 品牌区域 ==================== */
+.brand-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 28px;
+  padding-bottom: 4px;
+  flex-shrink: 0;
+}
+
+/* 已上传 Logo 图片 */
+.brand-logo-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+/* 默认靶心图标（与登录页同款，linear 风格） */
+.brand-logo-icon {
+  width: 60px;
+  height: 60px;
+  color: var(--color-primary);
+}
+
+.brand-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 10px 0 0 0;
+  line-height: 1.4;
+}
+
+.brand-subtitle {
+  font-size: 14px;
+  font-weight: 400;
+  color: #94A3B8;
+  margin: 4px 0 0 0;
+  line-height: 1.4;
 }
 
 /* --- 搜索框 --- */
@@ -787,7 +874,7 @@ onUnmounted(() => {
 /* --- 初始状态：搜索历史卡片 --- */
 .search-initial {
   flex-shrink: 0;
-  margin-top: 24px;
+  margin-top: 8px;
 }
 .history-card {
   background: var(--color-bg-card);

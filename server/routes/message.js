@@ -135,6 +135,15 @@ function formatMessage(row) {
   else if (diffDay < 7) time = `${diffDay}天前`
   else time = `${created.getMonth() + 1}月${created.getDate()}日`
 
+  // 解析文章名片 → 生成友好预览文本
+  let content = row.content
+  try {
+    const parsed = JSON.parse(row.content)
+    if (parsed.cardType === 'article') {
+      content = `[文章] ${parsed.title}`
+    }
+  } catch {}
+
   return {
     id: row.id,
     type: row.type,
@@ -143,7 +152,7 @@ function formatMessage(row) {
     senderAvatar: row.avatar || '',
     senderDepartment: row.sender_department || '',
     action: row.action,
-    content: row.content,
+    content,
     targetId: row.target_id,
     time,
     date: row.created_at,

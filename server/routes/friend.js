@@ -3,6 +3,7 @@
 
 import { queryAll, queryOne, execute } from '../db.js'
 import { authGuard } from '../middleware/auth.js'
+import { publish } from '../sse.js'
 
 // 在线判定阈值（分钟）
 const ONLINE_THRESHOLD_MINUTES = 5
@@ -128,6 +129,23 @@ export default async function friendRoutes(fastify) {
         [userId, request.user.name, `你和 ${request.user.name} 已成为好友`, request.user.userId],
       )
 
+      // SSE 实时推送
+      const { id: notifyId } = queryOne('SELECT last_insert_rowid() AS id') || {}
+      const now = new Date().toISOString()
+      publish(userId, {
+        type: 'new_notification',
+        id: notifyId,
+        notifyType: 'friend',
+        sender: request.user.name,
+        senderAccount: request.user.account || '',
+        action: '已接受你的好友请求',
+        content: `你和 ${request.user.name} 已成为好友`,
+        targetId: request.user.userId,
+        time: '刚刚',
+        date: now,
+        unread: true,
+      })
+
       return { ok: true, status: 'accepted' }
     }
 
@@ -136,6 +154,23 @@ export default async function friendRoutes(fastify) {
       "INSERT INTO messages (user_id, type, sender, action, content, target_id) VALUES (?, 'friend', ?, '请求添加你为好友', ?, ?)",
       [userId, request.user.name, `你好，我是 ${request.user.name}`, request.user.userId],
     )
+
+    // SSE 实时推送
+    const { id: notifyId } = queryOne('SELECT last_insert_rowid() AS id') || {}
+    const now = new Date().toISOString()
+    publish(userId, {
+      type: 'new_notification',
+      id: notifyId,
+      notifyType: 'friend',
+      sender: request.user.name,
+      senderAccount: request.user.account || '',
+      action: '请求添加你为好友',
+      content: `你好，我是 ${request.user.name}`,
+      targetId: request.user.userId,
+      time: '刚刚',
+      date: now,
+      unread: true,
+    })
 
     return { ok: true, status: 'requested' }
   })
@@ -179,6 +214,23 @@ export default async function friendRoutes(fastify) {
         "INSERT INTO messages (user_id, type, sender, action, content, target_id) VALUES (?, 'friend', ?, '已接受你的好友请求', ?, ?)",
         [userId, request.user.name, `你和 ${request.user.name} 已成为好友`, request.user.userId],
       )
+
+      // SSE 实时推送
+      const { id: notifyId } = queryOne('SELECT last_insert_rowid() AS id') || {}
+      const now = new Date().toISOString()
+      publish(userId, {
+        type: 'new_notification',
+        id: notifyId,
+        notifyType: 'friend',
+        sender: request.user.name,
+        senderAccount: request.user.account || '',
+        action: '已接受你的好友请求',
+        content: `你和 ${request.user.name} 已成为好友`,
+        targetId: request.user.userId,
+        time: '刚刚',
+        date: now,
+        unread: true,
+      })
     }
     // decline：请求已标记为已读，无需额外操作（静默拒绝）
 

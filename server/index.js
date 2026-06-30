@@ -11,6 +11,7 @@ import Fastify from 'fastify'
 const __dirname = import.meta.dirname || dirname(fileURLToPath(import.meta.url))
 import cors from '@fastify/cors'
 import multipart from '@fastify/multipart'
+import fastifyStatic from '@fastify/static'
 import config from './config.js'
 import { initDb, getDb } from './db.js'
 import authRoutes from './routes/auth.js'
@@ -26,6 +27,7 @@ import profileRoutes from './routes/profile.js'
 import adminRoutes from './routes/admin.js'
 import operationLogRoutes from './routes/operationLogs.js'
 import uploadRoutes from './routes/upload.js'
+import sseRoutes from './routes/sse.js'
 import seed from './seed.js'
 
 const fastify = Fastify({
@@ -93,7 +95,8 @@ try {
   await fastify.register(adminRoutes)
   await fastify.register(operationLogRoutes)
   await fastify.register(uploadRoutes)
-  fastify.log.info('14 组路由已注册')
+  await fastify.register(sseRoutes)
+  fastify.log.info('15 组路由已注册')
 
   // 4. 头像静态文件服务
   const MIME_MAP = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' }
@@ -120,14 +123,32 @@ try {
     return reply.send(buf)
   })
 
-  // 5. 健康检查
+  // 5. 前端静态文件（生产环境）
+  const DIST_DIR = join(__dirname, '..', 'dist')
+  await fastify.register(fastifyStatic, {
+    root: DIST_DIR,
+    prefix: '/',
+    wildcard: true,
+  })
+
+  // SPA 回退：非 API 路径且非静态文件 → 返回 index.html
+  const API_PREFIXES = ['/auth/', '/articles/', '/chat/', '/comments/', '/admin/', '/tenant/', '/api/', '/user/', '/users/', '/avatars/', '/uploads/', '/sse/']
+  fastify.setNotFoundHandler((request, reply) => {
+    const isApiPath = API_PREFIXES.some(p => request.url.startsWith(p))
+    if (!isApiPath && request.method === 'GET' && (request.headers.accept || '').includes('text/html')) {
+      return reply.sendFile('index.html')
+    }
+    reply.status(404).send({ message: 'Not Found' })
+  })
+
+  // 6. 健康检查
   fastify.get('/api/health', async () => ({
     ok: true,
     db: getDb() ? 'connected' : 'disconnected',
     uptime: process.uptime(),
   }))
 
-  // 6. 启动服务
+  // 7. 启动服务
   await fastify.listen({ port: config.PORT, host: config.HOST })
   fastify.log.info(`服务已启动 → http://localhost:${config.PORT}`)
   fastify.log.info(`健康检查 → http://localhost:${config.PORT}/api/health`)

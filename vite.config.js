@@ -11,7 +11,21 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // 手动分包：把大库拆成独立 chunk，加快首屏加载
+        manualChunks(id) {
+          if (id.includes('@phosphor-icons/vue')) {
+            return 'phosphor'
+          }
+        },
+      },
+    },
+  },
   server: {
+    host: '0.0.0.0',
+    allowedHosts: true,
     proxy: {
       // 将前端 API 请求代理到后端（开发模式下前后端分离的桥梁）
       // bypass：浏览器页面导航（Accept: text/html）不走代理，由 Vite 提供 SPA 回退
@@ -40,7 +54,12 @@ export default defineConfig({
           if (req.method === 'GET' && (req.headers.accept || '').includes('text/html')) return '/index.html'
         },
       },
-      '/chat': 'http://localhost:3000',
+      '/chat': {
+        target: 'http://localhost:3000',
+        bypass(req) {
+          if (req.method === 'GET' && (req.headers.accept || '').includes('text/html')) return '/index.html'
+        },
+      },
       '/comments': 'http://localhost:3000',
       '/admin': {
         target: 'http://localhost:3000',
@@ -55,6 +74,7 @@ export default defineConfig({
         },
       },
       '/avatars': 'http://localhost:3000',
+      '/sse': 'http://localhost:3000',
       '/uploads': 'http://localhost:3000',
     }
   }
