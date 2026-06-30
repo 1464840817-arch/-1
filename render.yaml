@@ -1,0 +1,16 @@
+# Render 部署描述文件
+# 文档：https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: ic-platform-demo
+    env: node
+    region: singapore
+    buildCommand: npm run build
+    startCommand: node server/index.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
+      - key: HOST
+        value: 0.0.0.0
+    autoDeploy: true
